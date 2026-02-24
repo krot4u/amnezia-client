@@ -49,7 +49,7 @@ PageType {
 
         anchors.fill: parent
 
-        model: xrayConfigs
+        model: ServersModel
 
         currentIndex: 0
 
