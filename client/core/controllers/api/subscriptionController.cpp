@@ -491,10 +491,10 @@ ErrorCode SubscriptionController::updateServiceFromGateway(int serverIndex, cons
     return ErrorCode::NoError;
 }
 
-ErrorCode SubscriptionController::deactivateDevice(int serverIndex)
+ErrorCode SubscriptionController::requestPremiumGatewayRevokeConfig(int serverIndex, QByteArray &responseBody)
 {
     ServerConfig serverConfigModel = m_serversRepository->server(serverIndex);
-    
+
     if (!serverConfigModel.isApiV2()) {
         return ErrorCode::NoError;
     }
@@ -503,7 +503,7 @@ ErrorCode SubscriptionController::deactivateDevice(int serverIndex)
     if (!apiV2) {
         return ErrorCode::NoError;
     }
-    
+
     if (!apiV2->isPremium() && !apiV2->isExternalPremium()) {
         return ErrorCode::NoError;
     }
@@ -522,8 +522,28 @@ ErrorCode SubscriptionController::deactivateDevice(int serverIndex)
     QJsonObject apiPayload = gatewayRequestData.toJsonObject();
 
     const bool isTestPurchase = apiV2->apiConfig.isTestPurchase;
+    return executeRequest(QString("%1v1/revoke_config"), apiPayload, responseBody, isTestPurchase);
+}
+
+ErrorCode SubscriptionController::deactivateDevice(int serverIndex)
+{
+    ServerConfig serverConfigModel = m_serversRepository->server(serverIndex);
+    
+    if (!serverConfigModel.isApiV2()) {
+        return ErrorCode::NoError;
+    }
+
+    const ApiV2ServerConfig* apiV2 = serverConfigModel.as<ApiV2ServerConfig>();
+    if (!apiV2) {
+        return ErrorCode::NoError;
+    }
+    
+    if (!apiV2->isPremium() && !apiV2->isExternalPremium()) {
+        return ErrorCode::NoError;
+    }
+
     QByteArray responseBody;
-    ErrorCode errorCode = executeRequest(QString("%1v1/revoke_config"), apiPayload, responseBody, isTestPurchase);
+    ErrorCode errorCode = requestPremiumGatewayRevokeConfig(serverIndex, responseBody);
     if (errorCode != ErrorCode::NoError && errorCode != ErrorCode::ApiNotFoundError) {
         return errorCode;
     }
@@ -533,6 +553,20 @@ ErrorCode SubscriptionController::deactivateDevice(int serverIndex)
     });
     m_serversRepository->editServer(serverIndex, serverConfigModel);
     return ErrorCode::NoError;
+}
+
+void SubscriptionController::revokeGatewayConfigBestEffort(int serverIndex)
+{
+    if (serverIndex < 0 || serverIndex >= m_serversRepository->serversCount()) {
+        return;
+    }
+
+    QByteArray responseBody;
+    const ErrorCode errorCode = requestPremiumGatewayRevokeConfig(serverIndex, responseBody);
+    if (errorCode != ErrorCode::NoError && errorCode != ErrorCode::ApiNotFoundError) {
+        qWarning().noquote() << "SubscriptionController: revoke_config failed while removing server (error"
+                             << static_cast<int>(errorCode) << "); removing locally anyway.";
+    }
 }
 
 ErrorCode SubscriptionController::deactivateExternalDevice(int serverIndex, const QString &uuid, const QString &serverCountryCode)

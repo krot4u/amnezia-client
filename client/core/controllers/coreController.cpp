@@ -170,7 +170,7 @@ void CoreController::initControllers()
 #ifdef Q_OS_WINDOWS
                                                      m_ikev2ConfigModel,
 #endif
-                                                     m_sftpConfigModel, m_socks5ConfigModel, this);
+                                                     m_sftpConfigModel, m_socks5ConfigModel, m_subscriptionController, this);
     setQmlContextProperty("InstallController", m_installUiController);
 
     m_importController = new ImportUiController(m_importCoreController, this);

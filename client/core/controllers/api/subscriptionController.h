@@ -67,6 +67,8 @@ public:
 
     ErrorCode deactivateDevice(int serverIndex);
 
+    void revokeGatewayConfigBestEffort(int serverIndex);
+
     ErrorCode deactivateExternalDevice(int serverIndex, const QString &uuid, const QString &serverCountryCode);
 
     ErrorCode exportNativeConfig(int serverIndex, const QString &serverCountryCode, QString &nativeConfig);
@@ -105,6 +107,8 @@ public:
                                                   const QString &serviceProtocol);
 
 private:
+    ErrorCode requestPremiumGatewayRevokeConfig(int serverIndex, QByteArray &responseBody);
+
     ErrorCode executeRequest(const QString &endpoint, const QJsonObject &apiPayload, QByteArray &responseBody, bool isTestPurchase = false);
     bool isApiKeyExpired(int serverIndex) const;
     

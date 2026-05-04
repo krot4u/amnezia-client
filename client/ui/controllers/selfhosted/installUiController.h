@@ -12,6 +12,8 @@
 #include "core/controllers/selfhosted/usersController.h"
 #include "core/controllers/selfhosted/installController.h"
 #include "core/utils/errorCodes.h"
+
+class SubscriptionController;
 #include "core/utils/routeModes.h"
 #include "core/utils/commonStructs.h"
 #include "core/models/containerConfig.h"
@@ -48,6 +50,7 @@ public:
 #endif
                                SftpConfigModel* sftpConfigModel,
                                Socks5ProxyConfigModel* socks5ConfigModel,
+                               SubscriptionController* subscriptionController,
                                QObject *parent = nullptr);
     ~InstallUiController();
 
@@ -140,6 +143,8 @@ private:
 #endif
     SftpConfigModel* m_sftpConfigModel;
     Socks5ProxyConfigModel* m_socks5ConfigModel;
+
+    SubscriptionController* m_subscriptionController;
 
     ServerCredentials m_processedServerCredentials;
 

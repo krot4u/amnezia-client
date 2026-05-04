@@ -29,6 +29,7 @@
 #include "core/utils/utilities.h"
 #include "core/models/serverConfig.h"
 #include "core/models/containerConfig.h"
+#include "core/controllers/api/subscriptionController.h"
 #include "core/models/protocols/awgProtocolConfig.h"
 #include "core/models/protocols/wireGuardProtocolConfig.h"
 #include "core/models/protocols/openVpnProtocolConfig.h"
@@ -69,6 +70,7 @@ InstallUiController::InstallUiController(InstallController *installController,
 #endif
                                          SftpConfigModel *sftpConfigModel,
                                          Socks5ProxyConfigModel *socks5ConfigModel,
+                                         SubscriptionController *subscriptionController,
                                          QObject *parent)
     : QObject(parent),
       m_installController(installController),
@@ -85,7 +87,8 @@ InstallUiController::InstallUiController(InstallController *installController,
       m_ikev2ConfigModel(ikev2ConfigModel),
 #endif
       m_sftpConfigModel(sftpConfigModel),
-      m_socks5ConfigModel(socks5ConfigModel)
+      m_socks5ConfigModel(socks5ConfigModel),
+      m_subscriptionController(subscriptionController)
 {
     connect(m_installController, &InstallController::configValidated, this, &InstallUiController::configValidated);
     connect(m_installController, &InstallController::validationErrorOccurred, this, [this](ErrorCode errorCode) {
@@ -286,6 +289,10 @@ void InstallUiController::rebootServer(int serverIndex)
 void InstallUiController::removeServer(int serverIndex)
 {
     QString serverName = m_serversController->getServerConfig(serverIndex).displayName();
+
+    if (m_subscriptionController) {
+        m_subscriptionController->revokeGatewayConfigBestEffort(serverIndex);
+    }
 
     m_serversController->removeServer(serverIndex);
     emit removeServerFinished(tr("Server '%1' was removed").arg(serverName));
