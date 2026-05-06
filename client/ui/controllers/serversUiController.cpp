@@ -272,6 +272,13 @@ bool ServersUiController::isDefaultServerFromApi() const
             || configVersion == apiDefs::ConfigSource::AmneziaGateway;
 }
 
+bool ServersUiController::isDefaultServerContainXRayConfigs() const
+{
+    int defaultIndex = getDefaultServerIndex();
+    const ServerConfig server = m_serversController->getServerConfig(defaultIndex);
+    return server.isXRayConfig();
+}
+
 int ServersUiController::getProcessedServerIndex() const
 {
     return m_processedServerIndex;
@@ -442,6 +449,26 @@ QString ServersUiController::adDescription() const
         return apiV2->apiConfig.serviceInfo.adDescription;
     }
     return QString();
+}
+
+void ServersUiController::setCurrentConfigIndex(const int index)
+{
+    m_serversController->setCurrentConfigIndex(index);
+}
+
+int ServersUiController::getCurrentConfigIndex() const
+{
+    return m_serversController->getCurrentConfigIndex();
+}
+
+QString ServersUiController::getConfigName(const int index) const
+{
+    return m_serversController->getConfigName(index);
+}
+
+QJsonArray ServersUiController::getConfigNames() const
+{
+    return m_serversController->getConfigNames();
 }
 
 void ServersUiController::updateContainersModel()
