@@ -176,6 +176,55 @@ void SecureServersRepository::clearLastConnectionConfig(int serverIndex, DockerC
     setContainerConfig(serverIndex, container, containerCfg);
 }
 
+void SecureServersRepository::setCurrentConfigIndex(const int index)
+{
+    ServerConfig config = server(m_defaultServerIndex);
+
+    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    if (auto *cfg = std::get_if<SelfHostedServerConfig>(&config.data))
+        cfg->currentConfig = index;
+}
+
+int SecureServersRepository::getCurrentConfigIndex() const
+{
+    const ServerConfig config = server(m_defaultServerIndex);
+    if (!config.isXRayConfig())
+        return int();
+
+    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    return xrayConfigs->currentConfig.value();
+}
+
+QString SecureServersRepository::getConfigString(const int index) const
+{
+    const ServerConfig config = server(m_defaultServerIndex);
+    if (!config.isXRayConfig())
+        return QString();
+
+    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    return xrayConfigs->xraySubscriptionConfigs->configString.at(index).toString();
+}
+
+QString SecureServersRepository::getConfigName(const int index) const
+{
+    const ServerConfig config = server(m_defaultServerIndex);
+    if (!config.isXRayConfig())
+        return QString();
+
+    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    return xrayConfigs->xraySubscriptionConfigs->configName.at(index).toString();
+}
+
+QJsonArray SecureServersRepository::getConfigNames() const
+{
+    const ServerConfig config = server(m_defaultServerIndex);
+    if (!config.isXRayConfig())
+        return QJsonArray();
+
+    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    return xrayConfigs->xraySubscriptionConfigs->configName;
+}
+
 ServerCredentials SecureServersRepository::serverCredentials(int index) const
 {
     ServerConfig config = server(index);

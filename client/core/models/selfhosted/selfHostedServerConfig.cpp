@@ -15,6 +15,31 @@
 namespace amnezia
 {
 
+QJsonObject SelfHostedServerConfig::XRaySubscriptionConfigs::toJson() const
+    {
+    QJsonObject obj;
+
+    if (!configString.isEmpty()) {
+        obj[QLatin1String("config_string")] = configString;
+    }
+
+    if (!configName.isEmpty()) {
+        obj[QLatin1String("config_name")] = configName;
+    }
+
+    return obj;
+}
+
+SelfHostedServerConfig::XRaySubscriptionConfigs SelfHostedServerConfig::XRaySubscriptionConfigs::fromJson(const QJsonObject &json)
+{
+    QJsonObject xrayConfigObj = json.value(QLatin1String("xray_subscription_config")).toObject();
+
+    XRaySubscriptionConfigs xraySubscriptionConfigs;
+    xraySubscriptionConfigs.configString = xrayConfigObj.value(QLatin1String("config_string")).toArray();
+    xraySubscriptionConfigs.configName = xrayConfigObj.value(QLatin1String("config_name")).toArray();
+    return xraySubscriptionConfigs;
+}
+
 using namespace ContainerEnumNS;
 
 bool SelfHostedServerConfig::hasCredentials() const
@@ -94,6 +119,15 @@ QJsonObject SelfHostedServerConfig::toJson() const
     }
     if (port.has_value()) {
         obj[configKey::port] = port.value();
+    }
+
+    QJsonObject xraySubscriptionConfigsObj = xraySubscriptionConfigs->toJson();
+    if (!xraySubscriptionConfigsObj.isEmpty()) {
+        obj[QLatin1String("xray_subscription_configs")] = xraySubscriptionConfigsObj;
+    }
+
+    if (currentConfig) {
+        obj[QLatin1String("xray_subscription_config_current")] = currentConfig.value();
     }
     
     return obj;

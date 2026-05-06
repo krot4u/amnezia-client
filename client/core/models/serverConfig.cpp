@@ -120,6 +120,10 @@ bool ServerConfig::isApiConfig() const
     return isApiV1() || isApiV2();
 }
 
+bool ServerConfig::isXRayConfig() const {
+    return isSelfHosted() && std::get<SelfHostedServerConfig>(data).currentConfig.has_value();
+}
+
 QJsonObject ServerConfig::toJson() const
 {
     return std::visit([](const auto& v) { return v.toJson(); }, data);

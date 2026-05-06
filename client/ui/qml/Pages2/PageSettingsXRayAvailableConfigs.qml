@@ -107,7 +107,7 @@ PageType {
 
                     imageSource: "qrc:/images/controls/download.svg"
 
-                    checked: index === ServersModel.getCurrentConfigIndex()
+                    checked: index === ServersUiController.getCurrentConfigIndex()
                     checkable: !ConnectionController.isConnected
 
                     onClicked: {
@@ -120,10 +120,10 @@ PageType {
                             return
                         }
 
-                        if (index !== ServersModel.getCurrentConfigIndex()) {
+                        if (index !== ServersUiController.getCurrentConfigIndex()) {
                             PageController.showBusyIndicator(true)
-                            ServersModel.setCurrentConfigIndex(index)
-                            ImportController.editServerConfigWithData(ServersModel.getConfigString(index), ServersModel.getProcessedServerIndex())
+                            ServersUiController.setCurrentConfigIndex(index)
+                            ImportController.editServerConfigWithData(ServersUiController.getConfigString(index), ServersUiController.getProcessedServerIndex())
                             PageController.showBusyIndicator(false)
                         }
                     }
@@ -154,7 +154,7 @@ PageType {
     }
 
     Component.onCompleted: {
-        const names = ServersModel.getConfigNames()
+        const names = ServersUiController.getConfigNames()
         xrayConfigs.clear()
 
         for (let i = 0; i < names.length; ++i) {

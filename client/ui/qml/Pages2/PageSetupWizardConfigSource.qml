@@ -197,8 +197,7 @@ PageType {
                 }
 
                 clickedFunc: function() {
-                    if (isValidUrl(textKey.textField.text)) {
-                        ImportController.importLink(textKey.textField.text)
+                    if (isValidUrl(textKey.textField.text) && ImportController.importLink(textKey.textField.text)) {
                         PageController.goToPage(PageEnum.PageSetupWizardViewConfig)
                     }else if (ImportController.extractConfigFromData(textKey.textField.text)) {
                         PageController.goToPage(PageEnum.PageSetupWizardViewConfig)

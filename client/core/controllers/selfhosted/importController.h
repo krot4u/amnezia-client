@@ -63,11 +63,17 @@ public:
     int qrChunksReceived() const;
     int qrChunksTotal() const;
 
+    ImportResult importLink(const QUrl &url);
+    ImportResult editServerConfigWithData(QString data, int serverIndex);
+    bool isValidBase64(const QByteArray &input);
+    QByteArray base64Decode(const QByteArray &input);
+
     void importConfig(const QJsonObject &config);
     QJsonObject processNativeWireGuardConfig(const QJsonObject &config);
 
 signals:
     void importFinished();
+    void linkImportFinished(const ImportResult &result);
     void importErrorOccurred(ErrorCode errorCode, bool goToPageHome);
     void restoreAppConfig(const QByteArray &data);
 
