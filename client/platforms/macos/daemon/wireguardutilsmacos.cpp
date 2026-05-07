@@ -58,11 +58,12 @@ void WireguardUtilsMacos::tunnelErrorOccurred(QProcess::ProcessError error) {
 }
 
 bool WireguardUtilsMacos::addInterface(const InterfaceConfig& config) {
-  Q_UNUSED(config);
   if (m_tunnel.state() != QProcess::NotRunning) {
     logger.warning() << "Unable to start: tunnel process already running";
     return false;
   }
+
+  const QString ifname = config.m_ifname.isEmpty() ? QString(WG_INTERFACE) : config.m_ifname;
 
   QDir wgRuntimeDir(WG_RUNTIME_DIR);
   if (!wgRuntimeDir.exists()) {
@@ -70,7 +71,7 @@ bool WireguardUtilsMacos::addInterface(const InterfaceConfig& config) {
   }
 
   QProcessEnvironment pe = QProcessEnvironment::systemEnvironment();
-  QString wgNameFile = wgRuntimeDir.filePath(QString(WG_INTERFACE) + ".name");
+  QString wgNameFile = wgRuntimeDir.filePath(ifname + ".name");
   pe.insert("WG_TUN_NAME_FILE", wgNameFile);
 #ifdef MZ_DEBUG
   pe.insert("LOG_LEVEL", "debug");
