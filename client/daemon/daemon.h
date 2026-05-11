@@ -45,6 +45,10 @@ class Daemon : public QObject {
   QString logs();
   void cleanLogs();
 
+  bool activateStaging(const InterfaceConfig& config);
+  bool discardStaging();
+  bool promoteStagingToActive(const InterfaceConfig& newConfig);
+
  signals:
   void connected(const QString& pubkey);
   /**
@@ -54,11 +58,17 @@ class Daemon : public QObject {
   void activationFailure();
   void disconnected();
   void backendFailure(DaemonError reason = DaemonError::ERROR_FATAL);
+  void stagingConnected(const QString& pubkey);
+  void stagingFailed();
 
  private:
   bool maybeUpdateResolvers(const InterfaceConfig& config);
   bool addExclusionRoute(const IPAddress& address);
   bool delExclusionRoute(const IPAddress& address);
+  void checkStagingHandshake();
+  QTimer m_stagingHandshakeTimer;
+  QTimer m_stagingTimeoutTimer;
+  InterfaceConfig m_stagingConfig;
 
  protected:
   virtual bool run(Op op, const InterfaceConfig& config) {
@@ -69,6 +79,10 @@ class Daemon : public QObject {
   virtual bool supportServerSwitching(const InterfaceConfig& config) const;
   virtual bool switchServer(const InterfaceConfig& config);
   virtual WireguardUtils* wgutils() const = 0;
+  virtual WireguardUtils* createWgUtils() = 0;
+  virtual void replaceActiveWgUtils(WireguardUtils* newUtils) = 0;
+
+  WireguardUtils* m_stagingWgutils = nullptr;
   virtual bool supportIPUtils() const { return false; }
   virtual IPUtils* iputils() { return nullptr; }
   virtual DnsUtils* dnsutils() { return nullptr; }

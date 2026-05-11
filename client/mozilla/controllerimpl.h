@@ -62,6 +62,10 @@ class ControllerImpl : public QObject {
 
   virtual bool silentServerSwitchingSupported() const { return true; }
 
+  virtual void activateStaging(const QJsonObject& config) { Q_UNUSED(config) }
+  virtual void discardStaging() {}
+  virtual void promoteStagingToActive(const QJsonObject& config) { Q_UNUSED(config) }
+
  signals:
   // This signal is emitted when the controller is initialized. Note that the
   // VPN tunnel can be already active. In this case, "connected" should be set
@@ -75,6 +79,9 @@ class ControllerImpl : public QObject {
   void connected(const QString& pubkey,
                  const QDateTime& connectionTimestamp = QDateTime());
   void disconnected();
+
+  void stagingConnected(const QString& pubkey);
+  void stagingFailed();
 
   // This method should be emitted after a checkStatus() call.
   // "serverIpv4Gateway" is the current VPN tunnel gateway.
