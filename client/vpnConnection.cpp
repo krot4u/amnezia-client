@@ -79,6 +79,7 @@ void VpnConnection::onConnectionStateChanged(Vpn::ConnectionState state)
 
 #if defined(Q_OS_IOS) || defined(MACOS_NE)
     if (state == Vpn::ConnectionState::Connected ||
+        state == Vpn::ConnectionState::Switching ||
         state == Vpn::ConnectionState::Connecting ||
         state == Vpn::ConnectionState::Reconnecting) {
         m_checkTimer.start();
