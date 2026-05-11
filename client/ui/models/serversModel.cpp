@@ -214,7 +214,7 @@ QVariant ServersModel::data(const QModelIndex &index, int role) const
     }
     case IsXRayConfigSelectionAvailableRole: {
         if (server.isSelfHosted()) {
-            return server.as<SelfHostedServerConfig>()->xraySubscriptionConfigs.has_value();
+            return server.as<NativeServerConfig>()->xraySubscriptionConfigs.has_value();
         }
     }
     }

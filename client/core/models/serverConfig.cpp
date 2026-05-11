@@ -121,7 +121,7 @@ bool ServerConfig::isApiConfig() const
 }
 
 bool ServerConfig::isXRayConfig() const {
-    return isSelfHosted() && std::get<SelfHostedServerConfig>(data).currentConfig.has_value();
+    return isNative() && std::get<NativeServerConfig>(data).currentConfig.has_value();
 }
 
 QJsonObject ServerConfig::toJson() const

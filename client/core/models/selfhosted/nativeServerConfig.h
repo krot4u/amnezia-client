@@ -2,7 +2,9 @@
 #define NATIVESERVERCONFIG_H
 
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QMap>
+#include <optional>
 
 #include "core/utils/containerEnum.h"
 #include "core/utils/containers/containerUtils.h"
@@ -21,6 +23,17 @@ struct NativeServerConfig {
     DockerContainer defaultContainer;
     QString dns1;
     QString dns2;
+
+    struct XRaySubscriptionConfigs
+    {
+        QJsonArray configString;
+        QJsonArray configName;
+
+        QJsonObject toJson() const;
+        static XRaySubscriptionConfigs fromJson(const QJsonObject &json);
+    };
+    std::optional<XRaySubscriptionConfigs> xraySubscriptionConfigs;
+    std::optional<int> currentConfig;
     
     bool hasContainers() const;
     ContainerConfig containerConfig(DockerContainer container) const;

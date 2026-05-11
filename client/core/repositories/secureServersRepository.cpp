@@ -64,7 +64,9 @@ void SecureServersRepository::setServersArray(const QJsonArray &servers)
 void SecureServersRepository::addServer(const ServerConfig &server)
 {
     m_servers.append(server);
+    qDebug() << "server added";
     syncToStorage();
+    qDebug() << "synced";
     emit serverAdded(server);
 }
 
@@ -180,8 +182,8 @@ void SecureServersRepository::setCurrentConfigIndex(const int index)
 {
     ServerConfig config = server(m_defaultServerIndex);
 
-    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
-    if (auto *cfg = std::get_if<SelfHostedServerConfig>(&config.data))
+    const NativeServerConfig *xrayConfigs = config.as<NativeServerConfig>();
+    if (auto *cfg = std::get_if<NativeServerConfig>(&config.data))
         cfg->currentConfig = index;
 }
 
@@ -191,7 +193,7 @@ int SecureServersRepository::getCurrentConfigIndex() const
     if (!config.isXRayConfig())
         return int();
 
-    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    const NativeServerConfig *xrayConfigs = config.as<NativeServerConfig>();
     return xrayConfigs->currentConfig.value();
 }
 
@@ -201,7 +203,7 @@ QString SecureServersRepository::getConfigString(const int index) const
     if (!config.isXRayConfig())
         return QString();
 
-    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    const NativeServerConfig *xrayConfigs = config.as<NativeServerConfig>();
     return xrayConfigs->xraySubscriptionConfigs->configString.at(index).toString();
 }
 
@@ -211,7 +213,7 @@ QString SecureServersRepository::getConfigName(const int index) const
     if (!config.isXRayConfig())
         return QString();
 
-    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    const NativeServerConfig *xrayConfigs = config.as<NativeServerConfig>();
     return xrayConfigs->xraySubscriptionConfigs->configName.at(index).toString();
 }
 
@@ -221,7 +223,7 @@ QJsonArray SecureServersRepository::getConfigNames() const
     if (!config.isXRayConfig())
         return QJsonArray();
 
-    const SelfHostedServerConfig *xrayConfigs = config.as<SelfHostedServerConfig>();
+    const NativeServerConfig *xrayConfigs = config.as<NativeServerConfig>();
     return xrayConfigs->xraySubscriptionConfigs->configName;
 }
 

@@ -15,6 +15,33 @@ namespace amnezia
 
 using namespace ContainerEnumNS;
 
+QJsonObject NativeServerConfig::XRaySubscriptionConfigs::toJson() const
+{
+    QJsonObject obj;
+
+    if (!configString.isEmpty()) {
+        obj[QLatin1String("config_string")] = configString;
+    }
+
+    if (!configName.isEmpty()) {
+        obj[QLatin1String("config_name")] = configName;
+    }
+
+    return obj;
+}
+
+NativeServerConfig::XRaySubscriptionConfigs NativeServerConfig::XRaySubscriptionConfigs::fromJson(const QJsonObject &json)
+{
+    XRaySubscriptionConfigs xraySubscriptionConfigs;
+    xraySubscriptionConfigs.configString = json.value(QLatin1String("config_string")).toArray();
+    xraySubscriptionConfigs.configName = json.value(QLatin1String("config_name")).toArray();
+
+    qDebug() << xraySubscriptionConfigs.configString.isEmpty();
+    qDebug() << xraySubscriptionConfigs.configName.isEmpty();
+
+    return xraySubscriptionConfigs;
+}
+
 bool NativeServerConfig::hasContainers() const
 {
     return !containers.isEmpty();
@@ -58,6 +85,15 @@ QJsonObject NativeServerConfig::toJson() const
     if (!dns2.isEmpty()) {
         obj[configKey::dns2] = dns2;
     }
+
+    QJsonObject xraySubscriptionConfigsObj = xraySubscriptionConfigs->toJson();
+    if (!xraySubscriptionConfigsObj.isEmpty()) {
+        obj[QLatin1String("xray_subscription_configs")] = xraySubscriptionConfigsObj;
+    }
+
+    if (currentConfig) {
+        obj[QLatin1String("xray_subscription_config_current")] = currentConfig.value();
+    }
     
     return obj;
 }
@@ -85,7 +121,13 @@ NativeServerConfig NativeServerConfig::fromJson(const QJsonObject& json)
     
     config.dns1 = json.value(configKey::dns1).toString();
     config.dns2 = json.value(configKey::dns2).toString();
-    
+
+    config.xraySubscriptionConfigs->fromJson(json.value(QLatin1String("xray_subscription_config")).toObject());
+    config.currentConfig = json.value(QLatin1String("xray_subscription_config_current")).toInt();
+
+    qDebug() << config.xraySubscriptionConfigs.has_value();
+    qDebug() << config.currentConfig.has_value();
+
     return config;
 }
 

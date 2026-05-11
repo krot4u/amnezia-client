@@ -2,7 +2,6 @@
 #define SELFHOSTEDSERVERCONFIG_H
 
 #include <QJsonObject>
-#include <QJsonArray>
 #include <QMap>
 #include <optional>
 
@@ -30,17 +29,6 @@ struct SelfHostedServerConfig {
     std::optional<QString> userName;
     std::optional<QString> password;
     std::optional<int> port;
-
-    struct XRaySubscriptionConfigs
-    {
-        QJsonArray configString;
-        QJsonArray configName;
-
-        QJsonObject toJson() const;
-        static XRaySubscriptionConfigs fromJson(const QJsonObject &json);
-    };
-    std::optional<XRaySubscriptionConfigs> xraySubscriptionConfigs;
-    std::optional<int> currentConfig;
     
     bool hasCredentials() const;
     bool isReadOnly() const;

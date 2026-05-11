@@ -16,6 +16,8 @@
 #include <QTimer>
 #include <algorithm>
 
+#include <iostream>
+
 #include "core/utils/containerEnum.h"
 #include "core/utils/containers/containerUtils.h"
 #include "core/utils/protocolEnum.h"
@@ -516,7 +518,7 @@ ImportController::ImportResult ImportController::editServerConfigWithData(QStrin
         if (auto current = serverCurrentConfig.as<T>()) {
             cfg.description = current->description;
 
-            if constexpr (std::is_same_v<T, SelfHostedServerConfig>) {
+            if constexpr (std::is_same_v<T, NativeServerConfig>) {
                 cfg.xraySubscriptionConfigs->configString = current->xraySubscriptionConfigs->configString;
                 cfg.currentConfig = m_serversRepository->getCurrentConfigIndex();
             }
@@ -607,13 +609,10 @@ void ImportController::importConfig(const QJsonObject &config)
     qDebug() << "userName: " << credentials.userName;
     qDebug() << "secretData: " << credentials.secretData << '\n';
 
-    qDebug() << "creds valid? -> " << credentials.isValid();
-    qDebug() << "config contains containers? -> " << config.contains(configKey::containers);
+    qDebug() << "creds valid or config contains containers? -> " << (credentials.isValid() || config.contains(configKey::containers));
 
     if (credentials.isValid() || config.contains(configKey::containers)) {
         ServerConfig serverConfig = ServerConfig::fromJson(config);
-        qDebug() << "server config is SH? -> " << serverConfig.isSelfHosted();
-        qDebug() << "server config is XRay? -> " << serverConfig.isXRayConfig();
         qDebug() << "adding server";
         m_serversRepository->addServer(serverConfig);
         emit importFinished();
