@@ -159,7 +159,11 @@ QString ServersUiController::getDefaultServerDescriptionCollapsed() const
     if (server.isApiConfig()) {
         return description;
     }
-    
+
+    if (server.isXRayConfig()) {
+        return getConfigName(getCurrentConfigIndex());
+    }
+
     DockerContainer container = server.defaultContainer();
     QString containerName = ContainerUtils::containerHumanNames().value(container);
     QString protocolVersion;
@@ -209,6 +213,10 @@ QString ServersUiController::getDefaultServerDescriptionExpanded() const
     
     if (server.isApiConfig()) {
         return description;
+    }
+
+    if (server.isXRayConfig()) {
+        return getConfigName(getCurrentConfigIndex());
     }
     
     return description + server.hostName();
@@ -459,6 +467,11 @@ void ServersUiController::setCurrentConfigIndex(const int index)
 int ServersUiController::getCurrentConfigIndex() const
 {
     return m_serversController->getCurrentConfigIndex();
+}
+
+QString ServersUiController::getConfigString(const int index) const
+{
+    return m_serversController->getConfigString(index);
 }
 
 QString ServersUiController::getConfigName(const int index) const

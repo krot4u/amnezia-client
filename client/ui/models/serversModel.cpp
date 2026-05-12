@@ -35,9 +35,8 @@ namespace
         constexpr char publicKeyInfo[] = "public_key";
         constexpr char expiresAt[] = "expires_at";
 
-        constexpr char xraySubscriptionConfig[] = "xray_subscription_configs";
-        constexpr char xraySubscriptionConfigString[] = "config_string";
-        constexpr char xraySubscriptionConfigName[] = "config_name";
+        constexpr char xraySubscriptionConfig[] = "xray_subscription_config";
+        constexpr char xraySubscriptionConfigName[] = "xray_subscription_config_name";
         constexpr char xraySubscriptionConfigCurrent[] = "xray_subscription_config_current";
     }
 
@@ -213,8 +212,8 @@ QVariant ServersModel::data(const QModelIndex &index, int role) const
         return apiUtils::isSubscriptionExpiringSoon(apiConfig.subscription.endDate);
     }
     case IsXRayConfigSelectionAvailableRole: {
-        if (server.isSelfHosted()) {
-            return server.as<NativeServerConfig>()->xraySubscriptionConfigs.has_value();
+        if (server.isXRayConfig()) {
+            return server.as<NativeServerConfig>()->configString.has_value();
         }
     }
     }

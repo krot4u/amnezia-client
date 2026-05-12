@@ -50,7 +50,7 @@ bool ImportUiController::importLink(const QUrl &url)
 
 bool ImportUiController::editServerConfigWithData(QString data, int serverIndex)
 {
-    auto result = m_importController->editServerConfigWithData(data, serverIndex);
+    auto result = m_importController->editServerConfigWithData(data, serverIndex, m_config);
 
     if (result.errorCode != ErrorCode::NoError) {
         emit importErrorOccurred(result.errorCode, false);

@@ -60,7 +60,7 @@ PageType {
                 id: backButton
                 objectName: "backButton"
 
-                Layout.topMargin: 20 + SettingsController.safeAreaTopMargin
+                Layout.topMargin: 20 + PageController.safeAreaTopMargin
             }
 
             HeaderTypeWithButton {
@@ -148,7 +148,7 @@ PageType {
                             PageController.showNotificationMessage(qsTr("Cannot remove server during active connection"))
                         } else {
                             PageController.showBusyIndicator(true)
-                            InstallController.removeProcessedServer()
+                            InstallController.removeServer(ServersUiController.getProcessedServerIndex())
                             PageController.showBusyIndicator(false)
                         }
                     }

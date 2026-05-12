@@ -66,7 +66,7 @@ PageType {
                 id: backButton
                 objectName: "backButton"
 
-                Layout.topMargin: 20 + SettingsController.safeAreaTopMargin
+                Layout.topMargin: 20 + PageController.safeAreaTopMargin
             }
 
             HeaderTypeWithButton {
@@ -154,8 +154,8 @@ PageType {
     }
 
     Component.onCompleted: {
-        const names = ServersUiController.getConfigNames()
         xrayConfigs.clear()
+        const names = ServersUiController.getConfigNames()
 
         for (let i = 0; i < names.length; ++i) {
             xrayConfigs.append({ title: names[i] })

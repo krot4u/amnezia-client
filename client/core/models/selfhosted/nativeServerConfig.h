@@ -24,15 +24,8 @@ struct NativeServerConfig {
     QString dns1;
     QString dns2;
 
-    struct XRaySubscriptionConfigs
-    {
-        QJsonArray configString;
-        QJsonArray configName;
-
-        QJsonObject toJson() const;
-        static XRaySubscriptionConfigs fromJson(const QJsonObject &json);
-    };
-    std::optional<XRaySubscriptionConfigs> xraySubscriptionConfigs;
+    std::optional<QJsonArray> configString;
+    std::optional<QJsonArray> configName;
     std::optional<int> currentConfig;
     
     bool hasContainers() const;
