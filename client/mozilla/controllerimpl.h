@@ -62,9 +62,9 @@ class ControllerImpl : public QObject {
 
   virtual bool silentServerSwitchingSupported() const { return true; }
 
-  virtual void activateStaging(const QJsonObject& config) { Q_UNUSED(config) }
+  virtual void activateStaging(const QJsonObject& config, const QString& stagingIfname) { Q_UNUSED(config) Q_UNUSED(stagingIfname) }
   virtual void discardStaging() {}
-  virtual void promoteStagingToActive(const QJsonObject& config) { Q_UNUSED(config) }
+  virtual void promoteStagingToActive(const QJsonObject& config, const QString& stagingIfname) { Q_UNUSED(config) Q_UNUSED(stagingIfname) }
 
  signals:
   // This signal is emitted when the controller is initialized. Note that the

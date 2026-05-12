@@ -28,9 +28,9 @@ class LocalSocketController final : public ControllerImpl {
 
   void deactivate() override;
 
-  void activateStaging(const QJsonObject& rawConfig) override;
+  void activateStaging(const QJsonObject& rawConfig, const QString& stagingIfname) override;
   void discardStaging() override;
-  void promoteStagingToActive(const QJsonObject& rawConfig) override;
+  void promoteStagingToActive(const QJsonObject& rawConfig, const QString& stagingIfname) override;
 
   void checkStatus() override;
 

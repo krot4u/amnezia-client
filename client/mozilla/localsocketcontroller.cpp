@@ -303,8 +303,8 @@ void LocalSocketController::activate(const QJsonObject& rawConfig) {
   write(json);
 }
 
-void LocalSocketController::activateStaging(const QJsonObject& rawConfig) {
-  QJsonObject json = buildActivateJson(rawConfig, "amn1");
+void LocalSocketController::activateStaging(const QJsonObject& rawConfig, const QString& stagingIfname) {
+  QJsonObject json = buildActivateJson(rawConfig, stagingIfname);
   json.insert("type", "activateStaging");
   write(json);
 }
@@ -315,8 +315,8 @@ void LocalSocketController::discardStaging() {
   write(json);
 }
 
-void LocalSocketController::promoteStagingToActive(const QJsonObject& rawConfig) {
-  QJsonObject json = buildActivateJson(rawConfig, "amn1");
+void LocalSocketController::promoteStagingToActive(const QJsonObject& rawConfig, const QString& stagingIfname) {
+  QJsonObject json = buildActivateJson(rawConfig, stagingIfname);
   json.insert("type", "promoteStagingToActive");
   write(json);
 }
