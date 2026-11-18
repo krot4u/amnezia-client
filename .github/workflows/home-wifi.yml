@@ -114,15 +114,19 @@ jobs:
           arch: linux_gcc_64
           modules: 'qtremoteobjects qt5compat qtimageformats qtshadertools'
           dir: ${{ runner.temp }}
+          cache: true
+          cache-key-prefix: amnezia-home-qt
       - name: Install Android Qt
         uses: jurplel/install-qt-action@v4.3.1
         with:
           version: ${{ env.QT_VERSION }}
-          host: linux
+          host: all_os
           target: android
           arch: android_arm64_v8a
           modules: 'qtremoteobjects qt5compat qtimageformats qtshadertools'
           dir: ${{ runner.temp }}
+          cache: true
+          cache-key-prefix: amnezia-home-qt
       - name: Restore permanent signing key
         env:
           KEYSTORE: ${{ secrets.HOME_ANDROID_KEYSTORE_BASE64 }}
