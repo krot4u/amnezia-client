@@ -116,6 +116,22 @@ PageType {
                 }
 
                 ListItemType {
+                    id: homeWifiButton
+
+                    Layout.fillWidth: true
+
+                    visible: Qt.platform.os === "android"
+
+                    text: qsTr("Home WiFi")
+                    subtitle: qsTr("Дома VPN выключен, вне дома — включён")
+                    trailingIconSource: "qrc:/images/controls/chevron-right.svg"
+
+                    onClicked: {
+                        Qt.openUrlExternally("amnezia-home://settings")
+                    }
+                }
+
+                ListItemType {
                     id: killSwitchButton
 
                     Layout.fillWidth: true

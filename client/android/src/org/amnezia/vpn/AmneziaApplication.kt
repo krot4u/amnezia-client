@@ -22,6 +22,7 @@ class AmneziaApplication : QtApplication(), CameraXConfig.Provider {
         VpnStateStore.init(this)
         Log.d(TAG, "Create Amnezia application")
         ServiceNotification.createNotificationChannel(this)
+        HomeWifiUpdateJob.schedule(this)
     }
 
     override fun getCameraXConfig(): CameraXConfig = CameraXConfig.Builder

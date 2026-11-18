@@ -79,7 +79,7 @@ private const val CHECK_NOTIFICATION_PERMISSION_ACTION_CODE = 4
 private const val PREFS_NOTIFICATION_PERMISSION_ASKED = "NOTIFICATION_PERMISSION_ASKED"
 private const val OPEN_FILE_AFTER_RESUME_DELAY_MS = 400L
 private const val KEY_PENDING_OPEN_FILE_URI = "pending_open_file_uri"
-private const val FILE_PROVIDER_AUTHORITY = "org.amnezia.vpn.qtprovider"
+private const val FILE_PROVIDER_AUTHORITY = BuildConfig.APPLICATION_ID + ".qtprovider"
 
 class AmneziaActivity : QtActivity() {
 
@@ -211,6 +211,11 @@ class AmneziaActivity : QtActivity() {
         intent?.let(::processIntent)
         runBlocking { vpnProto = proto.await() }
         billingRepository = BillingPaymentRepository(applicationContext)
+        if (HomeWifiSettings(this).enabled) {
+            try { HomeWifiService.start(this) }
+            catch (_: IllegalStateException) { HomeWifiSettings(this).status = "Откройте настройки домашнего Wi-Fi для запуска" }
+            catch (_: SecurityException) { HomeWifiSettings(this).status = "Проверьте разрешения домашнего Wi-Fi" }
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

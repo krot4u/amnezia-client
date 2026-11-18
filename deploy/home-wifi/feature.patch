@@ -1,0 +1,1089 @@
+diff --git a/client/android/AndroidManifest.xml b/client/android/AndroidManifest.xml
+index a0cddbb3..fb81ac7f 100644
+--- a/client/android/AndroidManifest.xml
++++ b/client/android/AndroidManifest.xml
+@@ -19,6 +19,13 @@
+     <!-- %%INSERT_FEATURES -->
+ 
+     <uses-permission android:name="android.permission.INTERNET" />
++    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
++    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
++    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
++    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
++    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
++    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
++    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+     <!-- To request network state -->
+     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+@@ -30,7 +37,7 @@
+ 
+     <application
+         android:name=".AmneziaApplication"
+-        android:label="-- %%INSERT_APP_NAME%% --"
++        android:label="Amnezia Home"
+         android:icon="@mipmap/icon"
+         android:roundIcon="@mipmap/icon_round"
+         android:banner="@mipmap/ic_banner"
+@@ -40,6 +47,28 @@
+         android:hasFragileUserData="false"
+         tools:targetApi="s">
+ 
++        <activity android:name=".HomeWifiActivity" android:exported="true"
++            android:label="Домашний Wi-Fi" android:theme="@android:style/Theme.Material.NoActionBar">
++            <intent-filter>
++                <action android:name="android.intent.action.VIEW" />
++                <category android:name="android.intent.category.DEFAULT" />
++                <category android:name="android.intent.category.BROWSABLE" />
++                <data android:scheme="amnezia-home" android:host="settings" />
++            </intent-filter>
++        </activity>
++
++        <service android:name=".HomeWifiService" android:exported="false" android:foregroundServiceType="specialUse">
++            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
++                android:value="User-enabled home Wi-Fi monitoring to disconnect VPN at home and reconnect away, including when the tunnel is stopped" />
++        </service>
++        <service android:name=".HomeWifiUpdateJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
++        <receiver android:name=".HomeWifiBootReceiver" android:exported="false">
++            <intent-filter>
++                <action android:name="android.intent.action.BOOT_COMPLETED" />
++                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
++            </intent-filter>
++        </receiver>
++
+         <activity
+             android:name=".AmneziaActivity"
+             android:configChanges="uiMode|screenSize|smallestScreenSize|screenLayout|orientation|density
+@@ -209,10 +238,10 @@
+ 
+         <provider
+             android:name="androidx.core.content.FileProvider"
+-            android:authorities="org.amnezia.vpn.qtprovider"
++            android:authorities="${applicationId}.qtprovider"
+             android:exported="false"
+             android:grantUriPermissions="true">
+             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/qtprovider_paths" />
+         </provider>
+     </application>
+-</manifest>
+\ No newline at end of file
++</manifest>
+diff --git a/client/android/build.gradle.kts b/client/android/build.gradle.kts
+index a2548455..29fd9a7d 100644
+--- a/client/android/build.gradle.kts
++++ b/client/android/build.gradle.kts
+@@ -37,7 +37,7 @@ android {
+     val abiList = qtTargetAbiList.split(",")
+ 
+     defaultConfig {
+-        applicationId = "org.amnezia.vpn"
++        applicationId = "org.amnezia.vpn.home"
+         targetSdk = qtTargetSdkVersion.toInt()
+ 
+         // keeps language resources for only the locales specified below
+diff --git a/client/android/src/org/amnezia/vpn/AmneziaActivity.kt b/client/android/src/org/amnezia/vpn/AmneziaActivity.kt
+index c1f3a721..35eb2051 100644
+--- a/client/android/src/org/amnezia/vpn/AmneziaActivity.kt
++++ b/client/android/src/org/amnezia/vpn/AmneziaActivity.kt
+@@ -79,7 +79,7 @@ private const val CHECK_NOTIFICATION_PERMISSION_ACTION_CODE = 4
+ private const val PREFS_NOTIFICATION_PERMISSION_ASKED = "NOTIFICATION_PERMISSION_ASKED"
+ private const val OPEN_FILE_AFTER_RESUME_DELAY_MS = 400L
+ private const val KEY_PENDING_OPEN_FILE_URI = "pending_open_file_uri"
+-private const val FILE_PROVIDER_AUTHORITY = "org.amnezia.vpn.qtprovider"
++private const val FILE_PROVIDER_AUTHORITY = BuildConfig.APPLICATION_ID + ".qtprovider"
+ 
+ class AmneziaActivity : QtActivity() {
+ 
+@@ -211,6 +211,11 @@ class AmneziaActivity : QtActivity() {
+         intent?.let(::processIntent)
+         runBlocking { vpnProto = proto.await() }
+         billingRepository = BillingPaymentRepository(applicationContext)
++        if (HomeWifiSettings(this).enabled) {
++            try { HomeWifiService.start(this) }
++            catch (_: IllegalStateException) { HomeWifiSettings(this).status = "Откройте настройки домашнего Wi-Fi для запуска" }
++            catch (_: SecurityException) { HomeWifiSettings(this).status = "Проверьте разрешения домашнего Wi-Fi" }
++        }
+     }
+ 
+     override fun onSaveInstanceState(outState: Bundle) {
+diff --git a/client/android/src/org/amnezia/vpn/AmneziaApplication.kt b/client/android/src/org/amnezia/vpn/AmneziaApplication.kt
+index b1c8f908..ecc37718 100644
+--- a/client/android/src/org/amnezia/vpn/AmneziaApplication.kt
++++ b/client/android/src/org/amnezia/vpn/AmneziaApplication.kt
+@@ -22,6 +22,7 @@ class AmneziaApplication : QtApplication(), CameraXConfig.Provider {
+         VpnStateStore.init(this)
+         Log.d(TAG, "Create Amnezia application")
+         ServiceNotification.createNotificationChannel(this)
++        HomeWifiUpdateJob.schedule(this)
+     }
+ 
+     override fun getCameraXConfig(): CameraXConfig = CameraXConfig.Builder
+diff --git a/client/android/src/org/amnezia/vpn/HomeWifiActivity.kt b/client/android/src/org/amnezia/vpn/HomeWifiActivity.kt
+new file mode 100644
+index 00000000..63f7d273
+--- /dev/null
++++ b/client/android/src/org/amnezia/vpn/HomeWifiActivity.kt
+@@ -0,0 +1,492 @@
++package org.amnezia.vpn
++
++import android.Manifest
++import android.app.AlertDialog
++import android.content.Intent
++import android.content.pm.PackageManager
++import android.content.res.Configuration.UI_MODE_NIGHT_MASK
++import android.content.res.Configuration.UI_MODE_NIGHT_YES
++import android.net.VpnService
++import android.os.Build
++import android.os.Bundle
++import android.os.Handler
++import android.os.Looper
++import android.provider.Settings
++import android.text.InputType
++import android.view.Menu
++import android.view.ViewGroup
++import android.widget.Button
++import android.widget.EditText
++import android.widget.FrameLayout
++import android.widget.LinearLayout
++import android.widget.ScrollView
++import android.widget.Switch
++import android.widget.TextView
++import android.widget.Toast
++import androidx.activity.ComponentActivity
++import androidx.activity.result.contract.ActivityResultContracts
++import androidx.core.content.ContextCompat
++import androidx.core.view.ViewCompat
++import androidx.core.view.WindowInsetsCompat
++import androidx.core.view.setPadding
++
++class HomeWifiActivity : ComponentActivity() {
++    private val settings by lazy { HomeWifiSettings(this) }
++    private val handler = Handler(Looper.getMainLooper())
++    private var statusUpdateRunnable: Runnable? = null
++    private var isUpdatingUI = false
++
++    // View references
++    private lateinit var statusView: TextView
++    private lateinit var currentSsidView: TextView
++    private lateinit var automationToggle: Switch
++    private lateinit var ssidsContainer: LinearLayout
++
++    private val requestLocationLauncher = registerForActivityResult(
++        ActivityResultContracts.RequestMultiplePermissions()
++    ) { granted ->
++        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) {
++            // Background location requested via separate button to App Details Settings
++            updateUI()
++            Toast.makeText(this, "Разрешение на местоположение дано. Для фоновой работы откройте параметры приложения.", Toast.LENGTH_LONG).show()
++        } else {
++            updateUI()
++        }
++    }
++
++    private val requestNotificationLauncher = registerForActivityResult(
++        ActivityResultContracts.RequestPermission()
++    ) { granted ->
++        if (!granted) Toast.makeText(this,
++            "Без разрешения на уведомления Android не покажет статус и новые версии. Их можно проверить кнопкой «Проверить обновления».",
++            Toast.LENGTH_LONG).show()
++        tryEnableAutomation()
++    }
++
++    private val vpnPrepareResultLauncher = registerForActivityResult(
++        ActivityResultContracts.StartActivityForResult()
++    ) { result ->
++        if (result.resultCode == RESULT_OK) {
++            tryEnableAutomation()
++        } else {
++            settings.enabled = false
++            updateUI()
++        }
++    }
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        setTheme(getActivityTheme())
++
++        val rootScroll = ScrollView(this).apply {
++            layoutParams = ViewGroup.LayoutParams(
++                ViewGroup.LayoutParams.MATCH_PARENT,
++                ViewGroup.LayoutParams.MATCH_PARENT
++            )
++        }
++
++        val root = LinearLayout(this).apply {
++            orientation = LinearLayout.VERTICAL
++            layoutParams = ViewGroup.LayoutParams(
++                ViewGroup.LayoutParams.MATCH_PARENT,
++                ViewGroup.LayoutParams.WRAP_CONTENT
++            )
++
++            // Title
++            addView(TextView(this@HomeWifiActivity).apply {
++                text = "Домашний Wi-Fi"
++                textSize = 20f
++                setTypeface(null, android.graphics.Typeface.BOLD)
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    LinearLayout.LayoutParams.WRAP_CONTENT
++                ).apply {
++                    setMargins(16.dpToPx(), 16.dpToPx(), 16.dpToPx(), 16.dpToPx())
++                    bottomMargin = 8.dpToPx()
++                }
++            })
++
++            // Status
++            statusView = TextView(this@HomeWifiActivity).apply {
++                text = "Статус: загрузка..."
++                textSize = 14f
++                setTextColor(getColor(android.R.color.darker_gray))
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    LinearLayout.LayoutParams.WRAP_CONTENT
++                ).apply {
++                    setMargins(16.dpToPx(), 8.dpToPx(), 16.dpToPx(), 24.dpToPx())
++                }
++            }
++            addView(statusView)
++
++            // Help: first connection
++            addView(TextView(this@HomeWifiActivity).apply {
++                text = "Совет: сначала импортируйте профиль и один раз подключитесь к VPN вручную."
++                textSize = 12f
++                setTextColor(getColor(android.R.color.darker_gray))
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    LinearLayout.LayoutParams.WRAP_CONTENT
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 16.dpToPx())
++                }
++            })
++
++            // Current SSID
++            currentSsidView = TextView(this@HomeWifiActivity).apply {
++                text = "Текущая сеть: —"
++                textSize = 14f
++                setTextColor(getColor(android.R.color.darker_gray))
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    LinearLayout.LayoutParams.WRAP_CONTENT
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 24.dpToPx())
++                }
++            }
++            addView(currentSsidView)
++
++            // Home SSIDs title
++            addView(TextView(this@HomeWifiActivity).apply {
++                text = "Домашние сети:"
++                textSize = 14f
++                setTypeface(null, android.graphics.Typeface.BOLD)
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    LinearLayout.LayoutParams.WRAP_CONTENT
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 12.dpToPx())
++                }
++            })
++
++            // SSID list container
++            ssidsContainer = LinearLayout(this@HomeWifiActivity).apply {
++                orientation = LinearLayout.VERTICAL
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    LinearLayout.LayoutParams.WRAP_CONTENT
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 16.dpToPx())
++                }
++            }
++            addView(ssidsContainer)
++
++            // Add current network button
++            addView(Button(this@HomeWifiActivity).apply {
++                text = "Добавить текущую сеть"
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    56.dpToPx()
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 12.dpToPx())
++                }
++                setOnClickListener { addCurrentNetwork() }
++            })
++
++            // Add custom SSID button
++            addView(Button(this@HomeWifiActivity).apply {
++                text = "Добавить вручную"
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    56.dpToPx()
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 16.dpToPx())
++                }
++                setOnClickListener { showAddSsidDialog() }
++            })
++
++            // Automation toggle
++            addView(FrameLayout(this@HomeWifiActivity).apply {
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    LinearLayout.LayoutParams.WRAP_CONTENT
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 12.dpToPx())
++                }
++                setBackgroundResource(
++                    if (isDarkTheme()) android.R.drawable.dialog_holo_dark_frame
++                    else android.R.drawable.dialog_holo_light_frame
++                )
++
++                addView(LinearLayout(this@HomeWifiActivity).apply {
++                    orientation = LinearLayout.HORIZONTAL
++                    layoutParams = ViewGroup.LayoutParams(
++                        ViewGroup.LayoutParams.MATCH_PARENT,
++                        ViewGroup.LayoutParams.MATCH_PARENT
++                    )
++                    setPadding(8.dpToPx())
++
++                    automationToggle = Switch(this@HomeWifiActivity).apply {
++                        text = "Включить автоматизацию"
++                        minHeight = 48.dpToPx()
++                        layoutParams = LinearLayout.LayoutParams(
++                            LinearLayout.LayoutParams.MATCH_PARENT,
++                            LinearLayout.LayoutParams.WRAP_CONTENT
++                        )
++                        setOnCheckedChangeListener { _, isChecked ->
++                            if (isUpdatingUI) return@setOnCheckedChangeListener
++                            if (isChecked) {
++                                requestPermissionsAndEnable()
++                            } else {
++                                settings.enabled = false
++                                HomeWifiService.stop(this@HomeWifiActivity)
++                                updateUI()
++                            }
++                        }
++                    }
++                    addView(automationToggle)
++                })
++            })
++
++            // Open app permissions button
++            addView(Button(this@HomeWifiActivity).apply {
++                text = "Разрешить работу в фоне"
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    56.dpToPx()
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 12.dpToPx())
++                }
++                setOnClickListener { openAppDetailsSettings() }
++            })
++
++            // Check location permission button
++            addView(Button(this@HomeWifiActivity).apply {
++                text = "Включить геолокацию"
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    56.dpToPx()
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 12.dpToPx())
++                }
++                setOnClickListener { openLocationSettings() }
++            })
++
++            // Update button
++            addView(Button(this@HomeWifiActivity).apply {
++                text = "Проверить обновления"
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    56.dpToPx()
++                ).apply {
++                    setMargins(16.dpToPx(), 0, 16.dpToPx(), 24.dpToPx())
++                }
++                setOnClickListener {
++                    startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(HomeWifiSettings.RELEASES_URL)))
++                }
++            })
++        }
++
++        rootScroll.addView(root)
++        setContentView(rootScroll)
++
++        // Apply window insets to avoid overlap with status/nav bar
++        ViewCompat.setOnApplyWindowInsetsListener(rootScroll) { v, insets ->
++            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
++            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
++            insets
++        }
++
++        updateUI()
++    }
++
++    override fun onResume() {
++        super.onResume()
++        handler.removeCallbacks(statusUpdateRunnable ?: Runnable {})
++        statusUpdateRunnable = Runnable {
++            if (!isDestroyed) {
++                updateUI()
++                handler.postDelayed(statusUpdateRunnable!!, 1000)
++            }
++        }
++        handler.post(statusUpdateRunnable!!)
++    }
++
++    override fun onPause() {
++        super.onPause()
++        statusUpdateRunnable?.let { handler.removeCallbacks(it) }
++    }
++
++    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
++        menu?.add("Домой")?.setOnMenuItemClickListener {
++            finish()
++            true
++        }
++        return true
++    }
++
++    private fun updateUI() {
++        isUpdatingUI = true
++
++        statusView.text = buildStatusString()
++        currentSsidView.text = "Текущая сеть: ${HomeWifiSettings.currentSsid(this) ?: "—"}"
++        automationToggle.isChecked = settings.enabled
++
++        ssidsContainer.removeAllViews()
++        settings.homeSsids.forEach { ssid ->
++            ssidsContainer.addView(LinearLayout(this).apply {
++                orientation = LinearLayout.HORIZONTAL
++                layoutParams = LinearLayout.LayoutParams(
++                    LinearLayout.LayoutParams.MATCH_PARENT,
++                    LinearLayout.LayoutParams.WRAP_CONTENT
++                ).apply { bottomMargin = 8.dpToPx() }
++
++                addView(TextView(this@HomeWifiActivity).apply {
++                    text = ssid
++                    layoutParams = LinearLayout.LayoutParams(
++                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
++                    ).apply { marginEnd = 8.dpToPx() }
++                })
++
++                addView(Button(this@HomeWifiActivity).apply {
++                    text = "Удалить"
++                    layoutParams = LinearLayout.LayoutParams(
++                        LinearLayout.LayoutParams.WRAP_CONTENT,
++                        48.dpToPx()
++                    )
++                    setOnClickListener {
++                        settings.homeSsids = settings.homeSsids - ssid
++                        updateUI()
++                    }
++                })
++            })
++        }
++
++        isUpdatingUI = false
++    }
++
++    private fun addCurrentNetwork() {
++        val currentSsid = HomeWifiSettings.currentSsid(this)
++        if (currentSsid == null) {
++            Toast.makeText(this, "Не удалось прочитать имя Wi-Fi. Проверьте подключение, геолокацию и разрешения.", Toast.LENGTH_LONG).show()
++            return
++        }
++        val ssids = settings.homeSsids.toMutableSet()
++        ssids.add(currentSsid)
++        settings.homeSsids = ssids
++        updateUI()
++    }
++
++    private fun showAddSsidDialog() {
++        val input = EditText(this).apply {
++            inputType = InputType.TYPE_CLASS_TEXT
++            hint = "Введите имя сети (SSID)"
++        }
++        val container = FrameLayout(this).apply {
++            layoutParams = FrameLayout.LayoutParams(
++                FrameLayout.LayoutParams.MATCH_PARENT,
++                FrameLayout.LayoutParams.WRAP_CONTENT
++            )
++            setPadding(16.dpToPx())
++            addView(input)
++        }
++        AlertDialog.Builder(this, getDialogTheme())
++            .setTitle("Добавить сеть")
++            .setView(container)
++            .setPositiveButton("Добавить") { _, _ ->
++                val ssid = input.text.toString().trim()
++                if (ssid.isNotEmpty()) {
++                    val ssids = settings.homeSsids.toMutableSet()
++                    ssids.add(ssid)
++                    settings.homeSsids = ssids
++                    updateUI()
++                }
++            }
++            .setNegativeButton("Отмена", null)
++            .show()
++    }
++
++    private fun requestPermissionsAndEnable() {
++        when {
++            ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED -> {
++                requestLocationLauncher.launch(
++                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
++                )
++            }
++            !hasLocationPermission() -> {
++                AlertDialog.Builder(this)
++                    .setTitle("Распознавание Wi-Fi в фоне")
++                    .setMessage("Откройте «Разрешения» → «Местоположение», выберите «Разрешить всегда» и включите точное местоположение. Затем вернитесь и включите автоматизацию.")
++                    .setPositiveButton("Открыть настройки") { _, _ -> openAppDetailsSettings() }
++                    .setNegativeButton("Отмена", null).show()
++            }
++            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
++                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED -> {
++                requestNotificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
++            }
++            else -> tryEnableAutomation()
++        }
++        updateUI()
++    }
++
++    private fun tryEnableAutomation() {
++        if (settings.homeSsids.isEmpty()) {
++            Toast.makeText(this, "Добавьте домашние сети", Toast.LENGTH_SHORT).show()
++            return
++        }
++        if (!HomeWifiSettings.locationEnabled(this)) {
++            Toast.makeText(this, "Включите геолокацию в системных настройках", Toast.LENGTH_SHORT).show()
++            return
++        }
++        if (!hasLocationPermission()) {
++            Toast.makeText(this, "Дайте разрешение на доступ к местоположению", Toast.LENGTH_SHORT).show()
++            return
++        }
++
++        val prepare = VpnService.prepare(this)
++        if (prepare != null) {
++            vpnPrepareResultLauncher.launch(prepare)
++        } else {
++            settings.enabled = true
++            try {
++                HomeWifiService.start(this)
++            } catch (_: IllegalStateException) {
++                settings.enabled = false
++                Toast.makeText(this, "Android запретил запуск службы. Проверьте настройки фоновой работы.", Toast.LENGTH_LONG).show()
++            } catch (_: SecurityException) {
++                settings.enabled = false
++                Toast.makeText(this, "Не хватает разрешения для запуска службы.", Toast.LENGTH_LONG).show()
++            }
++            updateUI()
++        }
++    }
++
++    private fun hasLocationPermission(): Boolean {
++        return HomeWifiSettings.hasLocationPermission(this)
++    }
++
++    private fun openAppDetailsSettings() {
++        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
++            data = android.net.Uri.fromParts("package", packageName, null)
++        }
++        startActivity(intent)
++    }
++
++    private fun openLocationSettings() {
++        startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
++    }
++
++    private fun buildStatusString(): String {
++        return when {
++            settings.homeSsids.isEmpty() -> "Статус: сети не добавлены"
++            !HomeWifiSettings.locationEnabled(this) -> "Статус: геолокация выключена"
++            !hasLocationPermission() -> "Статус: нет разрешения на доступ к местоположению"
++            !settings.enabled -> "Статус: автоматизация выключена"
++            else -> "Статус: ${settings.status}"
++        }
++    }
++
++    private fun isDarkTheme(): Boolean =
++        resources.configuration.uiMode and UI_MODE_NIGHT_MASK == UI_MODE_NIGHT_YES
++
++    private fun getActivityTheme(): Int =
++        if (isDarkTheme()) android.R.style.Theme_DeviceDefault
++        else android.R.style.Theme_DeviceDefault_Light
++
++    private fun getDialogTheme(): Int =
++        if (isDarkTheme()) android.R.style.Theme_DeviceDefault_Dialog_Alert
++        else android.R.style.Theme_DeviceDefault_Light_Dialog_Alert
++
++    private fun Int.dpToPx(): Int = (this * resources.displayMetrics.density).toInt()
++}
+diff --git a/client/android/src/org/amnezia/vpn/HomeWifiPolicy.kt b/client/android/src/org/amnezia/vpn/HomeWifiPolicy.kt
+new file mode 100644
+index 00000000..b91bc8d2
+--- /dev/null
++++ b/client/android/src/org/amnezia/vpn/HomeWifiPolicy.kt
+@@ -0,0 +1,16 @@
++package org.amnezia.vpn
++
++/** An unidentified Wi-Fi must never be treated as a trusted home network. */
++object HomeWifiPolicy {
++    enum class Network { HOME, AWAY, UNKNOWN }
++
++    fun normalizeSsid(raw: String?): String? = raw?.removeSurrounding("\"")
++        ?.takeUnless { it.isBlank() || it == "<unknown ssid>" || it == "0x" }
++
++    fun classify(home: Set<String>, wifiSsids: List<String?>): Network = when {
++        home.isEmpty() -> Network.UNKNOWN
++        wifiSsids.any { it != null && it in home } -> Network.HOME
++        wifiSsids.any { it == null } -> Network.UNKNOWN
++        else -> Network.AWAY
++    }
++}
+diff --git a/client/android/src/org/amnezia/vpn/HomeWifiService.kt b/client/android/src/org/amnezia/vpn/HomeWifiService.kt
+new file mode 100644
+index 00000000..fc5d0c7a
+--- /dev/null
++++ b/client/android/src/org/amnezia/vpn/HomeWifiService.kt
+@@ -0,0 +1,223 @@
++package org.amnezia.vpn
++
++import android.app.Notification
++import android.app.NotificationChannel
++import android.app.NotificationManager
++import android.app.PendingIntent
++import android.app.Service
++import android.content.BroadcastReceiver
++import android.content.Context
++import android.content.Intent
++import android.content.pm.ServiceInfo
++import android.net.ConnectivityManager
++import android.net.Network
++import android.net.NetworkCapabilities
++import android.net.NetworkRequest
++import android.net.VpnService
++import android.net.wifi.WifiInfo
++import android.os.Build
++import android.os.Handler
++import android.os.IBinder
++import android.os.Looper
++import android.os.SystemClock
++import androidx.core.content.ContextCompat
++import kotlinx.coroutines.CoroutineScope
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.SupervisorJob
++import kotlinx.coroutines.cancel
++import kotlinx.coroutines.launch
++import org.amnezia.vpn.protocol.ProtocolState
++
++/** Lives in the main process, independently of the protocol service which stops at home. */
++class HomeWifiService : Service() {
++    private val handler = Handler(Looper.getMainLooper())
++    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
++    private lateinit var settings: HomeWifiSettings
++    private lateinit var connectivity: ConnectivityManager
++    private val wifi = mutableMapOf<Network, String?>()
++    private var registered = false
++    private var state = VpnState.defaultState
++    private var lastAttempt = -RETRY_MS
++    private var lastNetwork = HomeWifiPolicy.Network.UNKNOWN
++
++    private val callback = object : ConnectivityManager.NetworkCallback(
++        if (Build.VERSION.SDK_INT >= 31) FLAG_INCLUDE_LOCATION_INFO else 0
++    ) {
++        override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
++            handler.post {
++                wifi[network] = HomeWifiPolicy.normalizeSsid((caps.transportInfo as? WifiInfo)?.ssid)
++                    ?: HomeWifiSettings.currentSsid(this@HomeWifiService)
++                schedule()
++            }
++        }
++
++        override fun onLost(network: Network) {
++            handler.post { wifi.remove(network); schedule() }
++        }
++    }
++
++    private val evaluate = Runnable { reconcile() }
++    private val heartbeat = object : Runnable {
++        override fun run() {
++            reconcile()
++            handler.postDelayed(this, RETRY_MS)
++        }
++    }
++
++    override fun onCreate() {
++        super.onCreate()
++        settings = HomeWifiSettings(this)
++        connectivity = getSystemService(ConnectivityManager::class.java)
++        val manager = getSystemService(NotificationManager::class.java)
++        manager.createNotificationChannel(NotificationChannel(CHANNEL, "Домашний Wi-Fi", NotificationManager.IMPORTANCE_LOW))
++        val notification = notification("Проверяем сеть…")
++        if (Build.VERSION.SDK_INT >= 34) {
++            startForeground(NOTIFICATION, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
++        } else startForeground(NOTIFICATION, notification)
++        val request = NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_WIFI).build()
++        try {
++            connectivity.registerNetworkCallback(request, callback)
++            registered = true
++            // Seed before the first callback; an unreadable SSID stays UNKNOWN.
++            connectivity.allNetworks.forEach { network ->
++                val caps = connectivity.getNetworkCapabilities(network)
++                if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
++                    !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
++                    wifi[network] = HomeWifiSettings.currentSsid(this)
++                }
++            }
++        } catch (_: SecurityException) {
++            updateStatus("Нет разрешения на чтение состояния сети")
++            stopSelf()
++            return
++        }
++        scope.launch {
++            VpnStateStore.dataFlow().collect {
++                state = it
++                schedule()
++            }
++        }
++        handler.postDelayed(heartbeat, SETTLE_MS)
++    }
++
++    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
++        if (!settings.enabled) stopSelf() else schedule()
++        return START_STICKY
++    }
++
++    private fun schedule() {
++        handler.removeCallbacks(evaluate)
++        handler.postDelayed(evaluate, SETTLE_MS)
++    }
++
++    private fun reconcile() {
++        if (!settings.enabled) { stopSelf(); return }
++        if (!HomeWifiSettings.hasLocationPermission(this) || !HomeWifiSettings.locationEnabled(this)) {
++            updateStatus("Нужно геоположение: точное, «Разрешить всегда», и включённая служба")
++            return
++        }
++        if (wifi.values.any { it == null }) {
++            val ssid = HomeWifiSettings.currentSsid(this)
++            if (ssid != null) wifi.keys.toList().forEach { wifi[it] = ssid }
++        }
++        val network = HomeWifiPolicy.classify(settings.homeSsids, wifi.values.toList())
++        if (network != lastNetwork) {
++            lastAttempt = -RETRY_MS
++            lastNetwork = network
++        }
++        when (network) {
++            HomeWifiPolicy.Network.UNKNOWN -> updateStatus("Не удалось определить Wi-Fi; состояние VPN сохранено")
++            HomeWifiPolicy.Network.HOME -> {
++                if (state.protocolState in setOf(ProtocolState.CONNECTED, ProtocolState.CONNECTING, ProtocolState.RECONNECTING)) {
++                    updateStatus("Дома — отключаем VPN…")
++                    sendBroadcast(Intent(ACTION_DISCONNECT).setPackage(packageName))
++                } else if (state.protocolState == ProtocolState.DISCONNECTING) updateStatus("Дома — отключаем VPN…")
++                else updateStatus("Дома — VPN выключен")
++            }
++            HomeWifiPolicy.Network.AWAY -> connectAway()
++        }
++    }
++
++    private fun connectAway() {
++        val proto = state.vpnProto
++        if (proto == null || state.serverIndex < 0) {
++            updateStatus("Сначала импортируйте профиль и один раз подключите VPN вручную")
++            return
++        }
++        if (VpnService.prepare(this) != null) {
++            updateStatus("Откройте Amnezia и разрешите VPN-подключение")
++            return
++        }
++        val running = AmneziaVpnService.isRunning(this, proto.processName)
++        if (running && state.protocolState == ProtocolState.CONNECTED) {
++            updateStatus("Вне дома — VPN подключён")
++            return
++        }
++        if (running && state.protocolState in setOf(ProtocolState.CONNECTING, ProtocolState.DISCONNECTING, ProtocolState.RECONNECTING)) {
++            updateStatus("Вне дома — VPN переключается…")
++            return
++        }
++        if (SystemClock.elapsedRealtime() - lastAttempt < RETRY_MS) return
++        lastAttempt = SystemClock.elapsedRealtime()
++        try {
++            ContextCompat.startForegroundService(this, Intent(this, proto.serviceClass))
++            updateStatus("Вне дома — подключаем VPN…")
++        } catch (_: IllegalStateException) {
++            updateStatus("Android ограничил запуск VPN; откройте Amnezia")
++        } catch (_: SecurityException) {
++            updateStatus("Нет разрешения на запуск VPN; откройте Amnezia")
++        }
++    }
++
++    private fun notification(text: String): Notification {
++        val open = PendingIntent.getActivity(this, 0, Intent(this, HomeWifiActivity::class.java),
++            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
++        return Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_amnezia_round)
++            .setContentTitle("Amnezia Home").setContentText(text).setContentIntent(open)
++            .setOngoing(true).setOnlyAlertOnce(true).build()
++    }
++
++    private fun updateStatus(text: String) {
++        if (settings.status == text) return
++        settings.status = text
++        getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification(text))
++    }
++
++    override fun onDestroy() {
++        handler.removeCallbacksAndMessages(null)
++        if (registered) connectivity.unregisterNetworkCallback(callback)
++        scope.cancel()
++        super.onDestroy()
++    }
++
++    override fun onBind(intent: Intent?): IBinder? = null
++
++    companion object {
++        private const val CHANNEL = "home_wifi"
++        private const val NOTIFICATION = 4101
++        private const val SETTLE_MS = 5_000L
++        private const val RETRY_MS = 60_000L
++
++        fun start(context: Context) {
++            ContextCompat.startForegroundService(context, Intent(context, HomeWifiService::class.java))
++        }
++
++        fun stop(context: Context) {
++            HomeWifiSettings(context).enabled = false
++            HomeWifiSettings(context).status = "Автоматизация выключена"
++            context.stopService(Intent(context, HomeWifiService::class.java))
++        }
++    }
++}
++
++class HomeWifiBootReceiver : BroadcastReceiver() {
++    override fun onReceive(context: Context, intent: Intent) {
++        if (intent.action !in setOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED)) return
++        HomeWifiUpdateJob.schedule(context)
++        if (HomeWifiSettings(context).enabled) {
++            try { HomeWifiService.start(context) }
++            catch (_: IllegalStateException) { HomeWifiSettings(context).status = "Откройте настройки домашнего Wi-Fi для запуска" }
++            catch (_: SecurityException) { HomeWifiSettings(context).status = "Android запретил автозапуск; откройте настройки домашнего Wi-Fi" }
++        }
++    }
++}
+diff --git a/client/android/src/org/amnezia/vpn/HomeWifiSettings.kt b/client/android/src/org/amnezia/vpn/HomeWifiSettings.kt
+new file mode 100644
+index 00000000..073684e0
+--- /dev/null
++++ b/client/android/src/org/amnezia/vpn/HomeWifiSettings.kt
+@@ -0,0 +1,46 @@
++package org.amnezia.vpn
++
++import android.Manifest
++import android.content.Context
++import android.content.pm.PackageManager
++import android.location.LocationManager
++import android.net.wifi.WifiManager
++import android.os.Build
++import androidx.core.content.ContextCompat
++
++/** Settings are only read in the main process; VPN credentials stay in upstream's encrypted store. */
++class HomeWifiSettings(context: Context) {
++    private val prefs = context.getSharedPreferences("home_wifi", Context.MODE_PRIVATE)
++
++    var enabled: Boolean
++        get() = prefs.getBoolean("enabled", false)
++        set(value) { prefs.edit().putBoolean("enabled", value).apply() }
++
++    var homeSsids: Set<String>
++        get() = prefs.getStringSet("ssids", emptySet())!!.toSet()
++        set(value) { prefs.edit().putStringSet("ssids", value.filter(String::isNotEmpty).toSet()).apply() }
++
++    var status: String
++        get() = prefs.getString("status", "Автоматизация выключена")!!
++        set(value) { prefs.edit().putString("status", value).apply() }
++
++    companion object {
++        const val RELEASES_URL = "https://github.com/krot4u/amnezia-client/releases"
++
++        fun hasLocationPermission(context: Context): Boolean =
++            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED &&
++                (Build.VERSION.SDK_INT < 29 || ContextCompat.checkSelfPermission(context,
++                    Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED)
++
++        fun locationEnabled(context: Context): Boolean =
++            context.getSystemService(LocationManager::class.java).isLocationEnabled
++
++        @Suppress("DEPRECATION", "MissingPermission")
++        fun currentSsid(context: Context): String? {
++            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED ||
++                !locationEnabled(context)) return null
++            val info = context.applicationContext.getSystemService(WifiManager::class.java).connectionInfo
++            return HomeWifiPolicy.normalizeSsid(info?.ssid)
++        }
++    }
++}
+diff --git a/client/android/src/org/amnezia/vpn/HomeWifiUpdateJob.kt b/client/android/src/org/amnezia/vpn/HomeWifiUpdateJob.kt
+new file mode 100644
+index 00000000..347e3ba0
+--- /dev/null
++++ b/client/android/src/org/amnezia/vpn/HomeWifiUpdateJob.kt
+@@ -0,0 +1,86 @@
++package org.amnezia.vpn
++
++import android.app.job.JobScheduler
++import android.app.Notification
++import android.app.NotificationChannel
++import android.app.NotificationManager
++import android.app.PendingIntent
++import android.app.job.JobInfo
++import android.app.job.JobParameters
++import android.app.job.JobService
++import android.content.ComponentName
++import android.content.Context
++import android.content.Intent
++import android.net.Uri
++import org.json.JSONArray
++import java.net.HttpURLConnection
++import java.net.URL
++import java.util.concurrent.Executors
++import java.util.concurrent.Future
++
++/** Checks our releases only. Android's installer still asks the user to install the APK. */
++class HomeWifiUpdateJob : JobService() {
++    private val executor = Executors.newSingleThreadExecutor()
++    private var task: Future<*>? = null
++
++    override fun onStartJob(params: JobParameters): Boolean {
++        task = executor.submit {
++            try {
++                val connection = URL("https://api.github.com/repos/krot4u/amnezia-client/releases?per_page=20")
++                    .openConnection() as HttpURLConnection
++                connection.connectTimeout = 15_000
++                connection.readTimeout = 15_000
++                connection.setRequestProperty("Accept", "application/vnd.github+json")
++                connection.setRequestProperty("User-Agent", "Amnezia-Home")
++                val releases = try {
++                    connection.inputStream.bufferedReader().use { JSONArray(it.readText()) }
++                } finally { connection.disconnect() }
++                for (i in 0 until releases.length()) {
++                    val release = releases.getJSONObject(i)
++                    val tag = release.getString("tag_name")
++                    val code = tag.removePrefix("home-").toLongOrNull() ?: continue
++                    if (release.optBoolean("draft") || release.optBoolean("prerelease")) continue
++                    val current = packageManager.getPackageInfo(packageName, 0).longVersionCode
++                    if (code > current) notifyUpdate(tag)
++                    break
++                }
++            } catch (_: Exception) {
++                // Offline or rate limited: retry in the next scheduled window; do not interrupt VPN.
++            } finally { jobFinished(params, false) }
++        }
++        return true
++    }
++
++    private fun notifyUpdate(tag: String) {
++        val manager = getSystemService(NotificationManager::class.java)
++        manager.createNotificationChannel(NotificationChannel("home_updates", "Обновления Amnezia Home", NotificationManager.IMPORTANCE_DEFAULT))
++        val open = PendingIntent.getActivity(this, 1,
++            Intent(Intent.ACTION_VIEW, Uri.parse("${HomeWifiSettings.RELEASES_URL}/tag/$tag")),
++            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
++        manager.notify(4102, Notification.Builder(this, "home_updates")
++            .setSmallIcon(R.drawable.ic_amnezia_round).setContentTitle("Доступно обновление Amnezia Home")
++            .setContentText("Нажмите, чтобы скачать новую сборку с домашним Wi-Fi")
++            .setContentIntent(open).setAutoCancel(true).build())
++    }
++
++    override fun onStopJob(params: JobParameters): Boolean {
++        task?.cancel(true)
++        return true
++    }
++
++    override fun onDestroy() {
++        executor.shutdownNow()
++        super.onDestroy()
++    }
++
++    companion object {
++        fun schedule(context: Context) {
++            val scheduler = context.getSystemService(JobScheduler::class.java)
++            if (scheduler.getPendingJob(4102) != null) return
++            scheduler.schedule(JobInfo.Builder(4102,
++                ComponentName(context, HomeWifiUpdateJob::class.java))
++                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
++                .setPeriodic(24 * 60 * 60 * 1000L).setPersisted(true).build())
++        }
++    }
++}
+diff --git a/client/android/src/org/amnezia/vpn/VpnProto.kt b/client/android/src/org/amnezia/vpn/VpnProto.kt
+index e1993ad0..047ebc05 100644
+--- a/client/android/src/org/amnezia/vpn/VpnProto.kt
++++ b/client/android/src/org/amnezia/vpn/VpnProto.kt
+@@ -13,7 +13,7 @@ enum class VpnProto(
+ ) {
+     WIREGUARD(
+         "WireGuard",
+-        "org.amnezia.vpn:amneziaAwgService",
++        "${BuildConfig.APPLICATION_ID}:amneziaAwgService",
+         AwgService::class.java
+     ) {
+         override fun createProtocol(): Protocol = Wireguard()
+@@ -21,7 +21,7 @@ enum class VpnProto(
+ 
+     AWG(
+         "AmneziaWG",
+-        "org.amnezia.vpn:amneziaAwgService",
++        "${BuildConfig.APPLICATION_ID}:amneziaAwgService",
+         AwgService::class.java
+     ) {
+         override fun createProtocol(): Protocol = Awg()
+@@ -29,7 +29,7 @@ enum class VpnProto(
+ 
+     OPENVPN(
+         "OpenVPN",
+-        "org.amnezia.vpn:amneziaOpenVpnService",
++        "${BuildConfig.APPLICATION_ID}:amneziaOpenVpnService",
+         OpenVpnService::class.java
+     ) {
+         override fun createProtocol(): Protocol = OpenVpn()
+@@ -37,7 +37,7 @@ enum class VpnProto(
+ 
+     XRAY(
+         "XRay",
+-        "org.amnezia.vpn:amneziaXrayService",
++        "${BuildConfig.APPLICATION_ID}:amneziaXrayService",
+         XrayService::class.java
+     ) {
+         override fun createProtocol(): Protocol = Xray.instance
+@@ -45,7 +45,7 @@ enum class VpnProto(
+ 
+     SSXRAY(
+         "SSXRay",
+-        "org.amnezia.vpn:amneziaXrayService",
++        "${BuildConfig.APPLICATION_ID}:amneziaXrayService",
+         XrayService::class.java
+     ) {
+         override fun createProtocol(): Protocol = Xray.instance
+diff --git a/client/ui/qml/Pages2/PageSettingsConnection.qml b/client/ui/qml/Pages2/PageSettingsConnection.qml
+index c569aaf7..b0ce9a43 100644
+--- a/client/ui/qml/Pages2/PageSettingsConnection.qml
++++ b/client/ui/qml/Pages2/PageSettingsConnection.qml
+@@ -115,6 +115,22 @@ PageType {
+                     }
+                 }
+ 
++                ListItemType {
++                    id: homeWifiButton
++
++                    Layout.fillWidth: true
++
++                    visible: Qt.platform.os === "android"
++
++                    text: qsTr("Home WiFi")
++                    subtitle: qsTr("Дома VPN выключен, вне дома — включён")
++                    trailingIconSource: "qrc:/images/controls/chevron-right.svg"
++
++                    onClicked: {
++                        Qt.openUrlExternally("amnezia-home://settings")
++                    }
++                }
++
+                 ListItemType {
+                     id: killSwitchButton
+ 

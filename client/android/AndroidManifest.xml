@@ -19,6 +19,13 @@
     <!-- %%INSERT_FEATURES -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- To request network state -->
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
@@ -30,7 +37,7 @@
 
     <application
         android:name=".AmneziaApplication"
-        android:label="-- %%INSERT_APP_NAME%% --"
+        android:label="Amnezia Home"
         android:icon="@mipmap/icon"
         android:roundIcon="@mipmap/icon_round"
         android:banner="@mipmap/ic_banner"
@@ -39,6 +46,28 @@
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:hasFragileUserData="false"
         tools:targetApi="s">
+
+        <activity android:name=".HomeWifiActivity" android:exported="true"
+            android:label="Домашний Wi-Fi" android:theme="@android:style/Theme.Material.NoActionBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="amnezia-home" android:host="settings" />
+            </intent-filter>
+        </activity>
+
+        <service android:name=".HomeWifiService" android:exported="false" android:foregroundServiceType="specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="User-enabled home Wi-Fi monitoring to disconnect VPN at home and reconnect away, including when the tunnel is stopped" />
+        </service>
+        <service android:name=".HomeWifiUpdateJob" android:exported="true" android:permission="android.permission.BIND_JOB_SERVICE" />
+        <receiver android:name=".HomeWifiBootReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <activity
             android:name=".AmneziaActivity"
@@ -209,7 +238,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="org.amnezia.vpn.qtprovider"
+            android:authorities="${applicationId}.qtprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/qtprovider_paths" />
