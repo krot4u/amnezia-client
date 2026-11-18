@@ -120,10 +120,10 @@ index b1c8f908..ecc37718 100644
      override fun getCameraXConfig(): CameraXConfig = CameraXConfig.Builder
 diff --git a/client/android/src/org/amnezia/vpn/HomeWifiActivity.kt b/client/android/src/org/amnezia/vpn/HomeWifiActivity.kt
 new file mode 100644
-index 00000000..63f7d273
+index 00000000..617d87c0
 --- /dev/null
 +++ b/client/android/src/org/amnezia/vpn/HomeWifiActivity.kt
-@@ -0,0 +1,492 @@
+@@ -0,0 +1,494 @@
 +package org.amnezia.vpn
 +
 +import android.Manifest
@@ -161,6 +161,7 @@ index 00000000..63f7d273
 +    private val handler = Handler(Looper.getMainLooper())
 +    private var statusUpdateRunnable: Runnable? = null
 +    private var isUpdatingUI = false
++    private var renderedSsids: Set<String>? = null
 +
 +    // View references
 +    private lateinit var statusView: TextView
@@ -236,7 +237,6 @@ index 00000000..63f7d273
 +            statusView = TextView(this@HomeWifiActivity).apply {
 +                text = "Статус: загрузка..."
 +                textSize = 14f
-+                setTextColor(getColor(android.R.color.darker_gray))
 +                layoutParams = LinearLayout.LayoutParams(
 +                    LinearLayout.LayoutParams.MATCH_PARENT,
 +                    LinearLayout.LayoutParams.WRAP_CONTENT
@@ -250,7 +250,6 @@ index 00000000..63f7d273
 +            addView(TextView(this@HomeWifiActivity).apply {
 +                text = "Совет: сначала импортируйте профиль и один раз подключитесь к VPN вручную."
 +                textSize = 12f
-+                setTextColor(getColor(android.R.color.darker_gray))
 +                layoutParams = LinearLayout.LayoutParams(
 +                    LinearLayout.LayoutParams.MATCH_PARENT,
 +                    LinearLayout.LayoutParams.WRAP_CONTENT
@@ -263,7 +262,6 @@ index 00000000..63f7d273
 +            currentSsidView = TextView(this@HomeWifiActivity).apply {
 +                text = "Текущая сеть: —"
 +                textSize = 14f
-+                setTextColor(getColor(android.R.color.darker_gray))
 +                layoutParams = LinearLayout.LayoutParams(
 +                    LinearLayout.LayoutParams.MATCH_PARENT,
 +                    LinearLayout.LayoutParams.WRAP_CONTENT
@@ -449,34 +447,38 @@ index 00000000..63f7d273
 +        currentSsidView.text = "Текущая сеть: ${HomeWifiSettings.currentSsid(this) ?: "—"}"
 +        automationToggle.isChecked = settings.enabled
 +
-+        ssidsContainer.removeAllViews()
-+        settings.homeSsids.forEach { ssid ->
-+            ssidsContainer.addView(LinearLayout(this).apply {
-+                orientation = LinearLayout.HORIZONTAL
-+                layoutParams = LinearLayout.LayoutParams(
-+                    LinearLayout.LayoutParams.MATCH_PARENT,
-+                    LinearLayout.LayoutParams.WRAP_CONTENT
-+                ).apply { bottomMargin = 8.dpToPx() }
-+
-+                addView(TextView(this@HomeWifiActivity).apply {
-+                    text = ssid
++        val ssids = settings.homeSsids
++        if (renderedSsids != ssids) {
++            renderedSsids = ssids
++            ssidsContainer.removeAllViews()
++            ssids.forEach { ssid ->
++                ssidsContainer.addView(LinearLayout(this).apply {
++                    orientation = LinearLayout.HORIZONTAL
 +                    layoutParams = LinearLayout.LayoutParams(
-+                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-+                    ).apply { marginEnd = 8.dpToPx() }
-+                })
++                        LinearLayout.LayoutParams.MATCH_PARENT,
++                        LinearLayout.LayoutParams.WRAP_CONTENT
++                    ).apply { bottomMargin = 8.dpToPx() }
 +
-+                addView(Button(this@HomeWifiActivity).apply {
-+                    text = "Удалить"
-+                    layoutParams = LinearLayout.LayoutParams(
-+                        LinearLayout.LayoutParams.WRAP_CONTENT,
-+                        48.dpToPx()
-+                    )
-+                    setOnClickListener {
-+                        settings.homeSsids = settings.homeSsids - ssid
-+                        updateUI()
-+                    }
++                    addView(TextView(this@HomeWifiActivity).apply {
++                        text = ssid
++                        layoutParams = LinearLayout.LayoutParams(
++                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
++                        ).apply { marginEnd = 8.dpToPx() }
++                    })
++
++                    addView(Button(this@HomeWifiActivity).apply {
++                        text = "Удалить"
++                        layoutParams = LinearLayout.LayoutParams(
++                            LinearLayout.LayoutParams.WRAP_CONTENT,
++                            48.dpToPx()
++                        )
++                        setOnClickListener {
++                            settings.homeSsids = settings.homeSsids - ssid
++                            updateUI()
++                        }
++                    })
 +                })
-+            })
++            }
 +        }
 +
 +        isUpdatingUI = false
@@ -640,10 +642,10 @@ index 00000000..b91bc8d2
 +}
 diff --git a/client/android/src/org/amnezia/vpn/HomeWifiService.kt b/client/android/src/org/amnezia/vpn/HomeWifiService.kt
 new file mode 100644
-index 00000000..fc5d0c7a
+index 00000000..784d26d7
 --- /dev/null
 +++ b/client/android/src/org/amnezia/vpn/HomeWifiService.kt
-@@ -0,0 +1,223 @@
+@@ -0,0 +1,225 @@
 +package org.amnezia.vpn
 +
 +import android.app.Notification
@@ -685,6 +687,7 @@ index 00000000..fc5d0c7a
 +    private var state = VpnState.defaultState
 +    private var lastAttempt = -RETRY_MS
 +    private var lastNetwork = HomeWifiPolicy.Network.UNKNOWN
++    private var displayedStatus: String? = null
 +
 +    private val callback = object : ConnectivityManager.NetworkCallback(
 +        if (Build.VERSION.SDK_INT >= 31) FLAG_INCLUDE_LOCATION_INFO else 0
@@ -824,7 +827,8 @@ index 00000000..fc5d0c7a
 +    }
 +
 +    private fun updateStatus(text: String) {
-+        if (settings.status == text) return
++        if (displayedStatus == text) return
++        displayedStatus = text
 +        settings.status = text
 +        getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification(text))
 +    }

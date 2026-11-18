@@ -4,8 +4,30 @@ import argparse
 import logging
 import os
 from pathlib import Path
+import re
 import subprocess
 import tempfile
+
+
+def version_key(path):
+    return tuple(int(part) for part in re.findall(r'\d+', path.parent.parent.name))
+
+
+def compiler_jars(base):
+    compilers = list((base / 'org.jetbrains.kotlin/kotlin-compiler-embeddable').glob('*/*/*.jar'))
+    if not compilers:
+        raise RuntimeError('Run the Android Gradle build first to resolve its Kotlin compiler')
+    compiler = max(compilers, key=version_key)
+    version = compiler.parent.parent.name
+    jars = [str(compiler)]
+    for artifact in ['kotlin-stdlib', 'kotlin-script-runtime']:
+        jars.append(str(next((base / 'org.jetbrains.kotlin' / artifact / version).glob('*/*.jar'))))
+    for artifact in ['org.jetbrains.kotlin/kotlin-reflect', 'org.jetbrains.intellij.deps/trove4j',
+                     'org.jetbrains/annotations', 'org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm']:
+        candidates = list((base / artifact).glob('*/*/*.jar'))
+        if candidates:
+            jars.append(str(max(candidates, key=version_key)))
+    return jars
 
 
 def main():
@@ -13,19 +35,7 @@ def main():
     parser.add_argument('--source', type=Path, required=True)
     parser.add_argument('--gradle-cache', type=Path, default=Path.home() / '.gradle/caches/modules-2/files-2.1')
     args = parser.parse_args()
-    base = args.gradle_cache
-    artifacts = [
-        'org.jetbrains.kotlin/kotlin-compiler-embeddable',
-        'org.jetbrains.kotlin/kotlin-stdlib',
-        'org.jetbrains.kotlin/kotlin-script-runtime',
-        'org.jetbrains.kotlin/kotlin-reflect',
-        'org.jetbrains.intellij.deps/trove4j',
-        'org.jetbrains/annotations',
-        'org.jetbrains.kotlinx/kotlinx-coroutines-core-jvm',
-    ]
-    jars = sorted(str(jar) for artifact in artifacts for jar in (base / artifact).glob('*/*/*.jar'))
-    if not jars or not any('kotlin-compiler-embeddable' in jar for jar in jars):
-        raise RuntimeError('Run the Android Gradle build first to resolve its Kotlin compiler')
+    jars = compiler_jars(args.gradle_cache)
     java = str(Path(os.environ['JAVA_HOME']) / 'bin/java') if os.environ.get('JAVA_HOME') else 'java'
     classpath = os.pathsep.join(jars)
     policy = args.source / 'client/android/src/org/amnezia/vpn/HomeWifiPolicy.kt'

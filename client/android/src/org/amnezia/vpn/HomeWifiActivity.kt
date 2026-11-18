@@ -35,6 +35,7 @@ class HomeWifiActivity : ComponentActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var statusUpdateRunnable: Runnable? = null
     private var isUpdatingUI = false
+    private var renderedSsids: Set<String>? = null
 
     // View references
     private lateinit var statusView: TextView
@@ -110,7 +111,6 @@ class HomeWifiActivity : ComponentActivity() {
             statusView = TextView(this@HomeWifiActivity).apply {
                 text = "Статус: загрузка..."
                 textSize = 14f
-                setTextColor(getColor(android.R.color.darker_gray))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
@@ -124,7 +124,6 @@ class HomeWifiActivity : ComponentActivity() {
             addView(TextView(this@HomeWifiActivity).apply {
                 text = "Совет: сначала импортируйте профиль и один раз подключитесь к VPN вручную."
                 textSize = 12f
-                setTextColor(getColor(android.R.color.darker_gray))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
@@ -137,7 +136,6 @@ class HomeWifiActivity : ComponentActivity() {
             currentSsidView = TextView(this@HomeWifiActivity).apply {
                 text = "Текущая сеть: —"
                 textSize = 14f
-                setTextColor(getColor(android.R.color.darker_gray))
                 layoutParams = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
@@ -323,34 +321,38 @@ class HomeWifiActivity : ComponentActivity() {
         currentSsidView.text = "Текущая сеть: ${HomeWifiSettings.currentSsid(this) ?: "—"}"
         automationToggle.isChecked = settings.enabled
 
-        ssidsContainer.removeAllViews()
-        settings.homeSsids.forEach { ssid ->
-            ssidsContainer.addView(LinearLayout(this).apply {
-                orientation = LinearLayout.HORIZONTAL
-                layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { bottomMargin = 8.dpToPx() }
-
-                addView(TextView(this@HomeWifiActivity).apply {
-                    text = ssid
+        val ssids = settings.homeSsids
+        if (renderedSsids != ssids) {
+            renderedSsids = ssids
+            ssidsContainer.removeAllViews()
+            ssids.forEach { ssid ->
+                ssidsContainer.addView(LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
                     layoutParams = LinearLayout.LayoutParams(
-                        0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
-                    ).apply { marginEnd = 8.dpToPx() }
-                })
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT
+                    ).apply { bottomMargin = 8.dpToPx() }
 
-                addView(Button(this@HomeWifiActivity).apply {
-                    text = "Удалить"
-                    layoutParams = LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        48.dpToPx()
-                    )
-                    setOnClickListener {
-                        settings.homeSsids = settings.homeSsids - ssid
-                        updateUI()
-                    }
+                    addView(TextView(this@HomeWifiActivity).apply {
+                        text = ssid
+                        layoutParams = LinearLayout.LayoutParams(
+                            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+                        ).apply { marginEnd = 8.dpToPx() }
+                    })
+
+                    addView(Button(this@HomeWifiActivity).apply {
+                        text = "Удалить"
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.WRAP_CONTENT,
+                            48.dpToPx()
+                        )
+                        setOnClickListener {
+                            settings.homeSsids = settings.homeSsids - ssid
+                            updateUI()
+                        }
+                    })
                 })
-            })
+            }
         }
 
         isUpdatingUI = false

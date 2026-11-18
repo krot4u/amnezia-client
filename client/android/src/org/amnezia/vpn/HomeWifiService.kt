@@ -39,6 +39,7 @@ class HomeWifiService : Service() {
     private var state = VpnState.defaultState
     private var lastAttempt = -RETRY_MS
     private var lastNetwork = HomeWifiPolicy.Network.UNKNOWN
+    private var displayedStatus: String? = null
 
     private val callback = object : ConnectivityManager.NetworkCallback(
         if (Build.VERSION.SDK_INT >= 31) FLAG_INCLUDE_LOCATION_INFO else 0
@@ -178,7 +179,8 @@ class HomeWifiService : Service() {
     }
 
     private fun updateStatus(text: String) {
-        if (settings.status == text) return
+        if (displayedStatus == text) return
+        displayedStatus = text
         settings.status = text
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION, notification(text))
     }
