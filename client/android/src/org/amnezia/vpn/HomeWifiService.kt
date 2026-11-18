@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
@@ -15,6 +16,7 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.net.VpnService
 import android.net.wifi.WifiInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -34,8 +36,8 @@ class HomeWifiService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private lateinit var settings: HomeWifiSettings
     private lateinit var connectivity: ConnectivityManager
-    private val wifi = mutableMapOf<Network, String?>()
     private var registered = false
+    private var receiverRegistered = false
     private var state = VpnState.defaultState
     private var lastAttempt = -RETRY_MS
     private var lastNetwork = HomeWifiPolicy.Network.UNKNOWN
@@ -45,16 +47,16 @@ class HomeWifiService : Service() {
         if (Build.VERSION.SDK_INT >= 31) FLAG_INCLUDE_LOCATION_INFO else 0
     ) {
         override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-            handler.post {
-                wifi[network] = HomeWifiPolicy.normalizeSsid((caps.transportInfo as? WifiInfo)?.ssid)
-                    ?: HomeWifiSettings.currentSsid(this@HomeWifiService)
-                schedule()
-            }
+            handler.post { schedule() }
         }
 
         override fun onLost(network: Network) {
-            handler.post { wifi.remove(network); schedule() }
+            handler.post { schedule() }
         }
+    }
+
+    private val wifiReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = schedule()
     }
 
     private val evaluate = Runnable { reconcile() }
@@ -79,14 +81,10 @@ class HomeWifiService : Service() {
         try {
             connectivity.registerNetworkCallback(request, callback)
             registered = true
-            // Seed before the first callback; an unreadable SSID stays UNKNOWN.
-            connectivity.allNetworks.forEach { network ->
-                val caps = connectivity.getNetworkCapabilities(network)
-                if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true &&
-                    !caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                    wifi[network] = HomeWifiSettings.currentSsid(this)
-                }
-            }
+            // A same-LAN SSID change need not change NetworkCapabilities.
+            ContextCompat.registerReceiver(this, wifiReceiver,
+                IntentFilter(WifiManager.NETWORK_STATE_CHANGED_ACTION), ContextCompat.RECEIVER_EXPORTED)
+            receiverRegistered = true
         } catch (_: SecurityException) {
             updateStatus("Нет разрешения на чтение состояния сети")
             stopSelf()
@@ -117,11 +115,13 @@ class HomeWifiService : Service() {
             updateStatus("Нужно геоположение: точное, «Разрешить всегда», и включённая служба")
             return
         }
-        if (wifi.values.any { it == null }) {
-            val ssid = HomeWifiSettings.currentSsid(this)
-            if (ssid != null) wifi.keys.toList().forEach { wifi[it] = ssid }
+        // Query live networks and SSIDs: callback WifiInfo may still describe the previous AP.
+        val physicalWifi = connectivity.allNetworks.mapNotNull(connectivity::getNetworkCapabilities).filter {
+            it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && !it.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
         }
-        val network = HomeWifiPolicy.classify(settings.homeSsids, wifi.values.toList())
+        val ssids = if (physicalWifi.size == 1) listOf(HomeWifiSettings.currentSsid(this))
+            else physicalWifi.map { HomeWifiPolicy.normalizeSsid((it.transportInfo as? WifiInfo)?.ssid) }
+        val network = HomeWifiPolicy.classify(settings.homeSsids, ssids)
         if (network != lastNetwork) {
             lastAttempt = -RETRY_MS
             lastNetwork = network
@@ -189,6 +189,7 @@ class HomeWifiService : Service() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         if (registered) connectivity.unregisterNetworkCallback(callback)
+        if (receiverRegistered) unregisterReceiver(wifiReceiver)
         scope.cancel()
         super.onDestroy()
     }
