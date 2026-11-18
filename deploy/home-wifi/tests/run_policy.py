@@ -39,11 +39,12 @@ def main():
     java = str(Path(os.environ['JAVA_HOME']) / 'bin/java') if os.environ.get('JAVA_HOME') else 'java'
     classpath = os.pathsep.join(jars)
     policy = args.source / 'client/android/src/org/amnezia/vpn/HomeWifiPolicy.kt'
+    protocol_state = args.source / 'client/android/protocolApi/src/main/kotlin/ProtocolState.kt'
     harness = Path(__file__).with_name('HomeWifiPolicyTest.kt')
     with tempfile.TemporaryDirectory(prefix='amnezia-home-policy-') as output:
         subprocess.run([java, '-cp', classpath, 'org.jetbrains.kotlin.cli.jvm.K2JVMCompiler',
                         '-no-stdlib', '-no-reflect', '-classpath', classpath, '-d', output,
-                        str(policy), str(harness)], check=True)
+                        str(policy), str(protocol_state), str(harness)], check=True)
         subprocess.run([java, '-cp', os.pathsep.join([output, classpath]),
                         'org.amnezia.vpn.HomeWifiPolicyTestKt'], check=True)
     logging.info('Network policy tests passed')

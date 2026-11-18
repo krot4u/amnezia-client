@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.Process
 import android.os.SystemClock
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
@@ -116,7 +117,12 @@ class HomeWifiService : Service() {
             return
         }
         // Query live networks and SSIDs: callback WifiInfo may still describe the previous AP.
-        val physicalWifi = connectivity.allNetworks.mapNotNull(connectivity::getNetworkCapabilities).filter {
+        val liveNetworks = connectivity.allNetworks.mapNotNull(connectivity::getNetworkCapabilities)
+        val ownVpnActive = liveNetworks.any {
+            it.hasTransport(NetworkCapabilities.TRANSPORT_VPN) && it.ownerUid == Process.myUid()
+        }
+        val phase = HomeWifiPolicy.effectiveState(state.protocolState, ownVpnActive)
+        val physicalWifi = liveNetworks.filter {
             it.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && !it.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
         }
         val ssids = if (physicalWifi.size == 1) listOf(HomeWifiSettings.currentSsid(this))
@@ -129,17 +135,17 @@ class HomeWifiService : Service() {
         when (network) {
             HomeWifiPolicy.Network.UNKNOWN -> updateStatus("Не удалось определить Wi-Fi; состояние VPN сохранено")
             HomeWifiPolicy.Network.HOME -> {
-                if (state.protocolState in setOf(ProtocolState.CONNECTED, ProtocolState.CONNECTING, ProtocolState.RECONNECTING)) {
+                if (ownVpnActive || phase in setOf(ProtocolState.CONNECTING, ProtocolState.RECONNECTING)) {
                     updateStatus("Дома — отключаем VPN…")
                     sendBroadcast(Intent(ACTION_DISCONNECT).setPackage(packageName))
-                } else if (state.protocolState == ProtocolState.DISCONNECTING) updateStatus("Дома — отключаем VPN…")
-                else updateStatus("Дома — VPN выключен")
+                    schedule()
+                } else updateStatus("Дома — VPN выключен")
             }
-            HomeWifiPolicy.Network.AWAY -> connectAway()
+            HomeWifiPolicy.Network.AWAY -> connectAway(phase)
         }
     }
 
-    private fun connectAway() {
+    private fun connectAway(phase: ProtocolState) {
         val proto = state.vpnProto
         // Current upstream configs omit the legacy serverIndex; the service caches the config itself.
         if (proto == null) {
@@ -151,11 +157,11 @@ class HomeWifiService : Service() {
             return
         }
         val running = AmneziaVpnService.isRunning(this, proto.processName)
-        if (running && state.protocolState == ProtocolState.CONNECTED) {
+        if (running && phase == ProtocolState.CONNECTED) {
             updateStatus("Вне дома — VPN подключён")
             return
         }
-        if (running && state.protocolState in setOf(ProtocolState.CONNECTING, ProtocolState.DISCONNECTING, ProtocolState.RECONNECTING)) {
+        if (running && phase in setOf(ProtocolState.CONNECTING, ProtocolState.DISCONNECTING, ProtocolState.RECONNECTING)) {
             updateStatus("Вне дома — VPN переключается…")
             return
         }

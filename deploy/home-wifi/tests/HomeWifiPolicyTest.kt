@@ -1,6 +1,14 @@
 package org.amnezia.vpn
 
+import org.amnezia.vpn.protocol.ProtocolState
+
 fun main() {
+    check(HomeWifiPolicy.effectiveState(ProtocolState.DISCONNECTING, false) == ProtocolState.DISCONNECTED)
+    check(HomeWifiPolicy.effectiveState(ProtocolState.CONNECTED, false) == ProtocolState.DISCONNECTED)
+    check(HomeWifiPolicy.effectiveState(ProtocolState.CONNECTING, false) == ProtocolState.CONNECTING)
+    check(HomeWifiPolicy.effectiveState(ProtocolState.RECONNECTING, false) == ProtocolState.RECONNECTING)
+    check(HomeWifiPolicy.effectiveState(ProtocolState.DISCONNECTING, true) == ProtocolState.DISCONNECTING)
+    check(HomeWifiPolicy.effectiveState(ProtocolState.CONNECTED, true) == ProtocolState.CONNECTED)
     val home = setOf("Home", "Home-5G")
     check(HomeWifiPolicy.classify(home, emptyList()) == HomeWifiPolicy.Network.AWAY)
     check(HomeWifiPolicy.classify(home, listOf("Home")) == HomeWifiPolicy.Network.HOME)
@@ -14,5 +22,5 @@ fun main() {
     check(HomeWifiPolicy.normalizeSsid(null) == null)
     check(HomeWifiPolicy.normalizeSsid("0x") == null)
     check(HomeWifiPolicy.normalizeSsid(" Home ") == " Home ")
-    println("PASS: home, away, unreadable Wi-Fi, multiple APs, empty settings and SSID normalization")
+    println("PASS: network policy, SSID normalization and stale VPN state recovery")
 }
