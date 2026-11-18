@@ -162,7 +162,7 @@ jobs:
         run: |
           set -euo pipefail
           printf 'Amnezia Home на базе официальной версии %s. Android 12+, arm64-v8a.\n\nSource: %s\nPatch: %s\n\nAPK подписан постоянным ключом. Устанавливайте поверх предыдущей Amnezia Home.\nИсходники: https://github.com/%s/tree/%s\n' "$UPSTREAM" "$UPSTREAM" "$PATCH_SHA" "$GITHUB_REPOSITORY" "$CUSTOM_SHA" > release-notes.txt
-          gh release create "home-$HOME_VERSION_CODE" release/* --title "Amnezia Home $UPSTREAM ($HOME_VERSION_CODE)" --notes-file release-notes.txt --target "$CUSTOM_SHA" --latest
+          gh release create "home-$HOME_VERSION_CODE" release/* --repo "$GITHUB_REPOSITORY" --title "Amnezia Home $UPSTREAM ($HOME_VERSION_CODE)" --notes-file release-notes.txt --target "$CUSTOM_SHA" --latest
       - name: Remove signing material
         if: always()
         run: rm -f "$RUNNER_TEMP/home-release.p12"
