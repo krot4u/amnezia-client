@@ -106,8 +106,8 @@ class HomeWifiService : Service() {
     }
 
     private fun schedule() {
-        handler.removeCallbacks(evaluate)
-        handler.postDelayed(evaluate, SETTLE_MS)
+        // Capability/RSSI events can be continuous; never postpone an already pending check.
+        if (!handler.hasCallbacks(evaluate)) handler.postDelayed(evaluate, SETTLE_MS)
     }
 
     private fun reconcile() {

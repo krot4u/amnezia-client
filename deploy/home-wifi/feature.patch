@@ -648,7 +648,7 @@ index 00000000..d0df2216
 +}
 diff --git a/client/android/src/org/amnezia/vpn/HomeWifiService.kt b/client/android/src/org/amnezia/vpn/HomeWifiService.kt
 new file mode 100644
-index 00000000..c90c988c
+index 00000000..6205ee6a
 --- /dev/null
 +++ b/client/android/src/org/amnezia/vpn/HomeWifiService.kt
 @@ -0,0 +1,233 @@
@@ -760,8 +760,8 @@ index 00000000..c90c988c
 +    }
 +
 +    private fun schedule() {
-+        handler.removeCallbacks(evaluate)
-+        handler.postDelayed(evaluate, SETTLE_MS)
++        // Capability/RSSI events can be continuous; never postpone an already pending check.
++        if (!handler.hasCallbacks(evaluate)) handler.postDelayed(evaluate, SETTLE_MS)
 +    }
 +
 +    private fun reconcile() {
