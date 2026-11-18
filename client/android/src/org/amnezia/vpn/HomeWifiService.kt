@@ -141,7 +141,8 @@ class HomeWifiService : Service() {
 
     private fun connectAway() {
         val proto = state.vpnProto
-        if (proto == null || state.serverIndex < 0) {
+        // Current upstream configs omit the legacy serverIndex; the service caches the config itself.
+        if (proto == null) {
             updateStatus("Сначала импортируйте профиль и один раз подключите VPN вручную")
             return
         }
